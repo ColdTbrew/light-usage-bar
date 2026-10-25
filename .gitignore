@@ -1,0 +1,9 @@
+/target/
+.DS_Store
+.env
+.env.*
+!.env.example
+/local/
+/private/
+/benchmarks/raw/
+*.log
