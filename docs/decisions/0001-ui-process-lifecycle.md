@@ -82,3 +82,11 @@ CodexBar와의 비교는 공통 provider subset에서 수행한다. claudebar는
 - [아키텍처](../architecture.md)
 - [성능 목표와 검증](../performance.md)
 - [비교 측정 기록](../benchmarks.md)
+
+## 2026-10-30 구현 상태
+
+미리보기 후보에는 AppKit host와 GPUI 0.2.2 helper를 구현했다. Host는 GPUI를 링크하지 않는다. 표시 DTO, 길이 제한 pipe, 준비·종료 응답, 실제 child 회수를 사용한다. native 좌표 배치는 NSScreen과 GPUI display ID를 연결한다. MacBook Pro에서 전체 실행 파일과 release 앱 번들 빌드가 통과했다.
+
+독립 검토에서 종료 메시지 유실, 중복 버튼 ID, 보조 화면 좌표, 정상 EOF의 잘못된 오류 표시를 발견해 수정했다. Linux와 macOS 동작 테스트가 통과했다. 잠긴 Mac에서의 smoke 실행은 표시 판정에 사용하지 않는다. 실제 패널 조작은 잠금 해제 후 확인해야 한다.
+
+이 기록은 구현 후보의 진행 상황이다. 단일 프로세스 후보와의 공통 조건 비교를 수행하지 않았으므로 ADR 상태는 검증 대기로 유지한다. 0.1.0 미리보기는 메모리 절감이나 두 후보의 성능 우열을 주장하지 않는다.

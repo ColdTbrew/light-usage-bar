@@ -1,0 +1,22 @@
+[package]
+name = "usage-app"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "light-usage-bar"
+path = "src/main.rs"
+
+[dependencies]
+usage-core = { path = "../usage-core" }
+usage-display = { path = "../usage-display" }
+usage-service = { path = "../usage-service" }
+tokio = { version = "=1.48.0", features = ["rt", "net", "time", "sync", "process", "io-util", "macros"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "=0.6.5"
+objc2-foundation = "=0.3.2"
+objc2-app-kit = "=0.3.2"
+dispatch2 = "=0.3.1"
+
+core-foundation = "=0.10.0"

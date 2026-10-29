@@ -1,75 +1,54 @@
 # Light Usage Bar
 
-**항상 켜 두기 부담 없는 macOS용 AI 구독 사용량 메뉴 막대 앱.**
+macOS 메뉴 막대에서 AI 구독 사용량과 초기화 시점을 확인하는 Rust 앱이다. AppKit 메뉴와 필요할 때 실행하는 GPUI 상세 패널을 사용한다.
 
-Claude, Codex, Grok Bot, Antigravity의 구독 사용량과 초기화 시점을 한곳에서 확인하는 앱을 **Rust + GPUI**로 만든다. 핵심 목표는 화면을 닫아 둔 시간이 대부분인 앱에 맞게 RAM, CPU, GPU, 네트워크 사용을 줄이는 것이다.
+현재 `0.1.0` 배포 후보를 개발 중이다. 대상은 Apple Silicon과 macOS 26 이상이다. 정식 릴리스나 설치 파일의 공개는 아직 완료하지 않았다. 네 제공자 전체 지원, UI 동작 완료, 저메모리 성능을 보장하는 단계가 아니다.
 
-> **현재 단계: 공통 데이터 계층 첫 구현.** Rust 사용량 모델과 메모리 캐시, 합성 데이터 검증 예제가 있다. 실행 가능한 macOS 앱, 설치 패키지, 완료된 제공자 연동, 성능 측정 결과는 아직 없다.
+## 현재 구현과 검증
 
-## 프로젝트 목표
+사용량 모델, 메모리 캐시, 제한된 비동기 갱신, AppKit 메뉴, GPUI 패널, 앱 번들 생성 스크립트가 있다. 메뉴와 패널에는 제공자별 상태, 수동 갱신, 제공자 켜기와 끄기, 인증 안내, 종료 동작을 구현했다. UI 조작 검증과 패키지 검증은 [배포 확인 목록](docs/release.md)에 구분한다.
 
-- **macOS에 집중한다.** Windows 지원은 범위에 포함하지 않는다. 첫 성능 검증 환경은 Apple Silicon Mac이며, Intel Mac 지원 여부는 별도로 검증한다.
-- **Rust로 상주 로직을, GPUI로 상세 패널을 만든다.** 메뉴 막대는 macOS 네이티브 API를 이용하고, 화면이 닫혀 있을 때 불필요한 렌더링과 UI 작업을 멈춘다.
-- **실제 구독 한도를 보여 준다.** API 과금 잔액이나 로컬 토큰 추정치를 구독 사용률로 바꾸어 표시하지 않는다.
-- **모르는 값은 모른다고 표시한다.** 인증 만료, 조회 불가, 오래된 값, 아직 지원하지 않는 항목을 0%와 구분한다.
-- **다른 사용량 앱과 RAM 사용량을 비교한다.** 같은 Mac, 같은 제공자 조합, 같은 갱신 조건에서 측정하고 재현 가능한 결과를 공개한다.
+2026-10-29에 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 GPUI 0.2.2를 포함한 워크스페이스 실행 파일의 컴파일을 확인했다. 컴파일 성공은 화면 표시나 메뉴 조작의 통과를 뜻하지 않는다.
 
-Rust나 GPUI를 사용한다는 사실만으로 저자원 동작이 보장되지는 않는다. 상주 프로세스와 패널 수명, 갱신 주기, 데이터 수집 방식의 비용을 실제로 측정해 구조를 결정한다.
-
-## 지원 대상
-
-아래는 구현 목표이며, 현재 지원 완료 목록이 아니다.
-
-| 제공자 | 표시하려는 정보 | 먼저 검증할 사항 |
+| 제공자 | 구현 | 실제 계정 확인 결과 |
 | --- | --- | --- |
-| Claude | 구독 사용률, 한도 구간, 초기화 시점 | 기존 인증을 안전하게 재사용할 수 있는지, 실제 응답과 계정 화면이 일치하는지 |
-| Codex | 구독 사용률, 한도 구간, 초기화 시점 | 실시간 조회와 로컬 기록의 구분, 계정 및 플랜별 응답 차이 |
-| Grok Bot | xAI 구독의 Bot 사용량과 갱신 시점 | 실제 계정 인증, Bot 사용량의 범위, 체험·팀·초과 사용 상태 |
-| Antigravity | 제공되는 모델군별 잔여 한도와 초기화 시점 | 앱 실행 여부에 따른 조회 경로와 수집 비용, 정확한 한도 의미 |
+| Codex | ChatGPT OAuth로 읽기 전용 사용량 조회 | 조회 성공. 한 계정에서 7일 구간 하나를 확인했다. 모든 플랜과 계정의 지원을 뜻하지 않는다. |
+| Grok Bot | 공식 OIDC 인증과 WebSocket `bot.usage` 조회 | 연결, 서버 사용자 일치, 조회 성공. 관찰한 구간의 `usagePercent`가 없어 사용률은 `Unknown`이다. 기간과 초기화 시점은 있었다. |
+| Claude | OAuth 사용량 조회와 기본 프로필 Keychain 읽기 | 비대화형 SSH 실행에서 `PermissionDenied`. 실제 사용량 조회는 미검증이다. |
+| Antigravity | 응답 파서 | 조회 전송 경로 미구현. `NeedsVerification`을 반환한다. |
 
-Grok Bot은 xAI API 크레딧이나 일반 채팅 한도와 구분한다. 제공자별 인증·데이터 경로와 불확실성은 [제공자 계획](docs/providers.md)에 정리한다.
+지원 범위와 오류의 의미는 [제공자 참조](docs/providers.md)에 있다. API 결제 잔액이나 로컬 토큰 추정치를 구독 사용률로 바꾸지 않는다. 누락된 값을 0%로 표시하지 않는다.
 
-## 구조 방향
+## 빌드와 설치
 
-작은 Rust 상주 프로세스가 메뉴 막대, 갱신 일정, 캐시와 제공자 어댑터를 담당한다. 상세 화면은 사용자가 메뉴 막대를 클릭했을 때 GPUI로 연다.
+Rust `1.99.1`, 전체 Xcode와 Metal toolchain이 있는 Apple Silicon Mac에서 빌드한다.
 
-우선 검증할 후보는 **GPUI 패널을 별도 프로세스로 실행하고 닫을 때 종료하는 구조**다. 같은 프로세스에서 창을 필요할 때만 만드는 구조와 RAM, 여는 속도, 반복 실행 비용을 비교한 뒤 확정한다. 분리 구조의 성능 우위는 아직 확인하지 않았다.
+```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodebuild -downloadComponent MetalToolchain
+bash scripts/package-macos.sh
+```
 
-백그라운드 갱신은 느린 주기로 시작하고, 수동 새로고침과 오래된 데이터의 갱신을 지원한다. 제공자 CLI, 브라우저, WebView를 사용량 수집 목적으로 계속 실행해 두는 구조는 기본 경로로 삼지 않는다.
+스크립트는 release 실행 파일 두 개를 하나의 `Light Usage Bar.app`에 넣고 ZIP과 SHA-256 파일을 생성한다. `SIGNING_IDENTITY`를 지정하지 않으면 ad hoc 서명을 사용한다. 공증은 수행하지 않는다. 이 명령의 존재는 배포 산출물 검증 완료를 뜻하지 않는다.
 
-## 성능 비교
+[설치와 패키징 안내](docs/install.md)에서 도구 준비, 출력 경로와 서명 제한을 확인한다. 인증 정보 취급은 [개인정보 설명](docs/privacy.md)을 따른다.
 
-주요 비교 대상은 [CodexBar](https://github.com/steipete/CodexBar)다. [claudebar](https://github.com/gautham-v/claudebar), [Aura](https://github.com/Rfluid/aura), [ai-usagebar](https://github.com/akitaonrails/ai-usagebar)는 지원 범위가 겹치는 조건에서 추가로 비교한다.
+## 갱신과 성능
 
-측정할 상태는 처음 실행한 뒤 대기, 패널 표시 중, 패널을 닫은 뒤 대기, 반복 열기·닫기 이후, 장시간 실행 이후다. 주 프로세스만 보지 않고 앱이 발생시킨 보조 프로세스의 비용도 기록한다.
+성공 후 기본 갱신 간격은 600초다. 수동 갱신도 최소 30초 간격과 `Retry-After`를 따른다. 요청은 제공자마다 하나, 전체 두 개까지 실행한다. 120초가 지난 성공 값은 오래된 값으로 구분한다. 조회 오류와 마지막 성공 값은 별도로 보관한다.
 
-**현재 모든 RAM·CPU·에너지 결과는 미측정이다.** 측정 방식은 [성능 계획](docs/performance.md), 결과를 채울 표는 [벤치마크 기록](docs/benchmarks.md)에 있다.
+적은 상주 비용은 제품 목표다. CodexBar 등과의 성능 비교, 50회 패널 반복 실험과 4시간 상주 실험은 아직 완료하지 않았다. RAM 절감률이나 에너지 우위는 주장하지 않는다.
 
 ## 문서
 
-| 문서 | 내용 |
-| --- | --- |
-| [프로젝트 목표와 범위](docs/vision.md) | 사용자 경험, 필수 요구사항, 제외 범위 |
-| [아키텍처](docs/architecture.md) | 프로세스, 이벤트, 캐시, 제공자 어댑터 |
-| [제공자 계획](docs/providers.md) | Claude·Codex·Grok Bot·Antigravity 데이터 및 인증 검증 |
-| [성능 계획](docs/performance.md) | RAM·CPU·전력 비용과 비교 실험 절차 |
-| [벤치마크 기록](docs/benchmarks.md) | 비교 조건 및 실제 결과를 기록할 양식 |
-| [로드맵](docs/roadmap.md) | 구현 순서와 단계별 완료 조건 |
-| [개발 및 검증](docs/development.md) | pstack-codex 작업 규칙, Rust 빌드 및 공통 모델 검증 |
-| [UI 프로세스 결정 기록](docs/decisions/0001-ui-process-lifecycle.md) | 두 구조의 장단점과 결정 조건 |
-| [참고 자료](docs/references.md) | 검토한 프로젝트와 원문 근거 |
+- [개발과 검증](docs/development.md)
+- [설치와 패키징](docs/install.md)
+- [현재 배포 상태](docs/release.md)
+- [제공자와 오류](docs/providers.md)
+- [개인정보와 인증](docs/privacy.md)
+- [아키텍처](docs/architecture.md)
+- [로드맵](docs/roadmap.md)
+- [성능 검증 계획](docs/performance.md)과 [측정 기록](docs/benchmarks.md)
+- [프로젝트 목표](docs/vision.md)와 [참고 자료](docs/references.md)
 
-## 개발 상태
-
-`usage-core`는 사용량의 단위와 사용·잔여 방향, 출처, 관측 시각을 보존한다. 조회 실패 시 마지막 성공 값을 유지하고 계정 전환 시 이전 값을 제거한다. 타임아웃과 네트워크 갱신 스케줄러는 아직 없다.
-
-Rust `1.99.1`을 사용한다. 저장소 루트에서 공통 로직과 합성 예제를 확인할 수 있다.
-
-```sh
-cargo test --workspace --all-targets --locked
-cargo run --locked -p usage-core --example cache_lifecycle
-```
-
-macOS 앱과 제공자 수집 구현에 앞서 실제 인증 가능성과 상주 비용을 검증한다. GPUI 버전과 최소 macOS 버전은 아직 정하지 않았다. 자세한 범위와 검증 명령은 [개발 및 검증](docs/development.md)에 있다.
-
-독립적인 커뮤니티 프로젝트이며 각 서비스의 공식 앱은 아니다. 라이선스는 아직 선택하지 않았다.
+각 서비스와 독립적인 커뮤니티 프로젝트다. 공식 앱이 아니다. 라이선스는 소유자가 아직 선택하지 않았다. 공개 저장소라는 사실만으로 재배포나 상업적 사용 권한을 부여하지 않는다.

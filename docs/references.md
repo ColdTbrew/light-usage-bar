@@ -1,8 +1,16 @@
 # 연동 조사 출처
 
-**확인일: 2026-10-25 · 저장소 상태: docs-only.** 아래 자료는 [제공자 연동 계획](providers.md)의 근거다. 공개 소스와 문서를 읽었으며 Light Usage Bar의 빌드, 실제 계정 인증·quota 조회, RAM·CPU 측정은 수행하지 않았다.
+초기 조사일은 2026-10-25다. 아래 목록은 당시 공개 소스와 문서를 읽은 기록이다. 현재 구현과 2026-10-29의 실계정 조회 결과는 [제공자 참조](providers.md)와 [배포 상태](release.md)에 있다. RAM과 CPU 비교는 아직 수행하지 않았다.
 
 서비스 공식 문서는 제품·플랜 의미의 근거로, 공개 프로그램의 코드는 그 프로그램이 사용하는 경로의 근거로 구분한다. GitHub issue의 제안이나 관리자 설명은 완료된 구현 또는 실제 계정 성공 증거가 아니다. `main` URL과 open 상태는 확인일 이후 바뀔 수 있다. 구현 시 실제로 참고한 commit과 버전을 별도로 기록한다.
+
+## 구현 시 고정한 소스
+
+2026-10-29 구현 조사에서는 아래 revision을 사용했다. 이후 `main`의 변경을 현재 구현 근거로 간주하지 않는다.
+
+- [OpenAI Codex b75d1e8](https://github.com/openai/codex/tree/b75d1e89665d256bf2c674b9590776f440c9bae7)의 passive WHAM 조회와 인증 저장 형식.
+- [xAI grok-build 2bdd1d6](https://github.com/xai-org/grok-build/tree/2bdd1d6a6369de0e8c68132ea4539e9abd9e14a8)의 OIDC, `bot_client` handshake와 `bot.usage`.
+- [CodexBar 5f93dc3](https://github.com/steipete/CodexBar/tree/5f93dc3068b3bee3f8753f3772614cc2949c335d)의 Claude OAuth 경로와 Antigravity summary 파서.
 
 ## Claude
 

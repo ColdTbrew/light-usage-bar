@@ -13,7 +13,7 @@
 
 - Build a macOS menu bar app with Rust and GPUI for Claude, Codex, Grok Bot subscription usage, and Antigravity.
 - Windows and Linux are outside the current project scope. Do not add portability work as a prerequisite.
-- The repository contains a shared Rust data/cache library and product plans. The macOS app, provider integrations, releases, and benchmarks remain unimplemented. Do not report them as complete.
+- The repository contains Rust data/cache, provider and scheduling libraries, an AppKit host, a GPUI panel, and packaging scripts. Implementation does not establish runtime or release completion. Check docs/release.md and docs/providers.md for observed verification and remaining gates. Never report unverified UI, provider support, releases, or benchmarks as complete.
 - Keep project documentation in Korean, with technical identifiers and source names unchanged where useful.
 
 ## Correctness

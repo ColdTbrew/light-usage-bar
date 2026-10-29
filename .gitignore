@@ -7,3 +7,5 @@
 /private/
 /benchmarks/raw/
 *.log
+
+/dist/
