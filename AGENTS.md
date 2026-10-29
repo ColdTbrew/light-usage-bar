@@ -7,12 +7,13 @@
 - Keep design and implementation review independent. Verify observable behavior before reporting completion. Record checks that could not run on the current machine.
 - Install or update the workflow using [pstack-codex](https://github.com/ColdTbrew/pstack-codex). Do not copy its entire skill collection into this repository.
 - Use `uv` for any Python work.
+- Use the user's MacBook Pro on the tailnet, `coldbrew@macbookpro`, for macOS builds and app execution. The current DGX has the dedicated SSH alias `light-usage-bar-mac`. The DGX Spark Ubuntu ARM64 machine can verify the pure Rust core. Keep remote work in an isolated task directory and record the actual Mac environment and checks. Do not substitute Linux checks for macOS runtime evidence.
 
 ## Scope
 
 - Build a macOS menu bar app with Rust and GPUI for Claude, Codex, Grok Bot subscription usage, and Antigravity.
 - Windows and Linux are outside the current project scope. Do not add portability work as a prerequisite.
-- The repository currently contains plans only. Do not imply that a build, provider integration, release, or benchmark exists before it does.
+- The repository contains a shared Rust data/cache library and product plans. The macOS app, provider integrations, releases, and benchmarks remain unimplemented. Do not report them as complete.
 - Keep project documentation in Korean, with technical identifiers and source names unchanged where useful.
 
 ## Correctness
