@@ -166,7 +166,21 @@ fn guidance(provider: DisplayProvider) {
     let mtm = MainThreadMarker::new().unwrap();
     let alert = NSAlert::new(mtm);
     alert.setMessageText(&NSString::from_str(&format!("{} sign-in", provider.name())));
-    alert.setInformativeText(&NSString::from_str("Sign in using the provider's official app or website, then refresh here. This app does not collect passwords. Support and quota semantics remain unverified until an authorized provider observation is available."));
+    let text = match provider {
+        DisplayProvider::Codex => {
+            "Sign in to the Codex CLI with ChatGPT, then refresh here. Light Usage Bar reads the CLI's local sign-in state. API key billing is not supported."
+        }
+        DisplayProvider::Claude => {
+            "Sign in to Claude Code, then refresh here. If the default profile needs Keychain permission, open Keychain Access and add the installed Light Usage Bar.app to the allowed apps for Claude Code-credentials. Keep existing allowed apps. Custom profiles use their own credentials file. Claude usage access remains unverified."
+        }
+        DisplayProvider::GrokBot => {
+            "Sign in to the official Grok CLI with your personal account, then refresh here. Light Usage Bar reads the CLI's local sign-in state for Grok Bot usage. API keys and team accounts are not supported."
+        }
+        DisplayProvider::Antigravity => {
+            "Open the supported official Antigravity app, sign in, and leave it running. Then refresh here. Light Usage Bar must verify the account identity reported by the app before reading quota. If identity is unavailable, the status remains NeedsVerification."
+        }
+    };
+    alert.setInformativeText(&NSString::from_str(text));
     alert.runModal();
 }
 #[derive(Default)]

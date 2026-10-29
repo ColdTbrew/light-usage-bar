@@ -1,6 +1,6 @@
 # 제공자와 오류 참조
 
-2026-10-29 기준이며 Antigravity 로컬 연결 검사는 2026-10-30에 추가했다. 파서 구현, 실제 계정 조회, 계정 화면과의 대조를 구분한다. 아래 결과는 관찰한 계정과 환경에 한정한다.
+2026-10-30 기준이다. 파서 구현, 실제 계정 조회, 계정 화면과의 대조를 구분한다. 아래 결과는 관찰한 계정과 환경에 한정한다.
 
 ## 지원 상태
 
@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | Codex | `chatgpt.com/backend-api/wham/usage` | 읽기 전용 조회 성공. 7일 구간 하나 수신 | 다른 플랜과 조직, 만료 인증, 공식 계정 화면 대조 미완료 |
 | Grok Bot | `computer-hub.grok.com/v1/tools?role=bot_client`의 `bot.usage` | OIDC 인증, 서버 사용자 일치, capability와 조회 성공 | 관찰 응답에 `usagePercent` 없음. 사용률은 `Unknown`. 기간과 초기화 시점은 보존. 팀 계정 미지원 |
-| Claude | `api.anthropic.com/api/oauth/usage` | 비대화형 SSH에서 Keychain `PermissionDenied` | 실제 사용량 조회와 계정 화면 대조 미완료 |
+| Claude | `api.anthropic.com/api/oauth/usage` | 잠금 해제한 Mac의 비대화형 probe도 Keychain `PermissionDenied`. 별도 진단은 해석 전 OSStatus `-25308` | 실제 설치 앱의 접근 허용과 사용량 조회, 계정 화면 대조 미완료 |
 | Antigravity | 실행 중인 앱의 loopback HTTPS `GetUserStatus`와 `RetrieveUserQuotaSummary` | 자체 listener의 macOS ABI 검사 통과. 설치 앱 2.24.0의 status 응답에 email이 없어 `NeedsVerification` | 확인된 standalone 설치 경로만 지원. identity를 보고하는 앱 상태에서 quota 조회와 계정 화면 대조 필요 |
 
 Grok Bot은 xAI API 크레딧이나 일반 Grok 채팅 사용량을 뜻하지 않는다. Antigravity를 종료하면 새 사용량을 조회할 수 없다. 공식 앱을 열고 갱신한다. 로컬 관찰이 실패하면 이전 snapshot과 조회 시각을 보존하고 `Stale`로 표시한다. 계정이나 source 변경이 확인되면 이전 값을 지운다.
@@ -31,6 +31,21 @@ Claude 기본 프로필에서 파일이 없을 때만 macOS `Claude Code-credent
 Claude 내부 식별자는 인증 정보의 fingerprint다. 실제 사용자나 프로필의 확인 완료를 뜻하지 않는다. Codex는 선택 workspace와 사용자 claim을 검사한다. Grok은 서버의 사용자 ID가 선택한 인증과 일치하는지 확인한다. 조회 후 로컬 인증 정보를 다시 읽어 로그인 변경 중의 응답을 거부한다.
 
 Finder로 실행하는 앱이 터미널의 환경 변수를 그대로 받는다고 가정하면 안 된다. 사용자 지정 경로가 필요하면 해당 변수를 지정한 셸에서 호스트 실행 파일을 실행한다. 다중 계정 선택 UI는 없다.
+
+## Claude Keychain 접근 문제
+
+먼저 Claude Code에서 로그인한 뒤 갱신한다. 사용자 지정 프로필은 해당 프로필의 `.credentials.json`을 사용한다. 전역 Keychain 권한을 바꿔도 사용자 지정 프로필의 누락 파일을 대신하지 않는다.
+
+기본 프로필에서 Keychain 접근 권한이 필요한 경우에만 아래 절차를 적용한다. 해당 항목에 Access Control이 있어야 한다. [Apple의 앱별 Keychain 접근 설정](https://support.apple.com/en-gb/guide/mac-help/kychn002/26/mac/26)을 따른다.
+
+1. Keychain Access에서 `Claude Code-credentials` 항목을 연다. 암호를 표시하거나 복사하지 않는다.
+2. Access Control에서 기존 허용 앱을 유지하고, 실제 설치한 `/Applications/Light Usage Bar.app`을 추가한다. 임시 probe나 다른 빌드를 추가하지 않는다.
+3. 변경 사항을 저장하고 macOS 인증 요청을 직접 승인한다.
+4. 같은 설치 앱에서 Claude를 갱신하고 결과를 확인한다.
+
+모든 앱에 대한 접근 허용은 선택하지 않는다. 인증 값이나 공식 도구의 파일은 편집하지 않는다. 항목이 없거나 여러 개이거나 Access Control이 없으면 임의로 항목을 만들거나 변경하지 않는다.
+
+2026-10-30의 별도 진단은 credential 해석 전에 Keychain 검색에서 OSStatus `-25308`을 확인했다. Apple SDK의 이름은 `errSecInteractionNotAllowed`다. 이 결과만으로 특정 ACL이 원인이라고 단정하거나 최종 설치 앱의 신뢰 상태를 판단할 수 없다. probe와 설치 앱은 접근 권한을 확인해야 하는 실행 파일이 다르다. 설치 앱의 접근 성공과 실제 사용량 조회는 아직 확인하지 않았다. 사용자가 Mac을 조작할 수 없어 GUI 동의와 조작 검증은 연기했다.
 
 ## 조회 제한
 
