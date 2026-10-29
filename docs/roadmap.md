@@ -1,6 +1,6 @@
 # 로드맵
 
-2026-10-29 기준이다. 체크는 해당 문장에 적힌 구현이나 확인만 뜻한다. 코드가 있다는 사실과 실제 UI에서 동작했다는 사실을 구분한다. 최신 실행 결과는 [배포 상태](release.md)에 있다.
+2026-10-30 기준이다. 체크는 해당 문장에 적힌 구현이나 확인만 뜻한다. 코드가 있다는 사실과 실제 UI에서 동작했다는 사실을 구분한다. 최신 실행 결과는 [배포 상태](release.md)에 있다.
 
 ## 데이터와 갱신
 
@@ -20,8 +20,10 @@
 - [x] Grok 실계정 연결, 서버 사용자 일치와 `bot.usage` 성공 확인.
 - [x] Grok 응답의 누락 사용률을 `Unknown`으로 보존.
 - [x] Antigravity summary 응답 파서 구현.
+- [x] Antigravity의 같은 사용자, Google 서명, 실행 경로와 socket을 확인하는 로컬 탐색과 읽기 전용 HTTPS 전송 구현.
+- [x] Antigravity 설치 앱 2.24.0의 email 누락을 `NeedsVerification`으로 거절하고 앱 종료를 `TemporarilyUnavailable`로 처리함을 확인.
 - [ ] Claude 실제 사용량 조회. 현재 비대화형 환경의 Keychain 권한 거부.
-- [ ] Antigravity의 안전한 로컬 서비스 탐색과 전송 구현.
+- [ ] Antigravity가 identity를 보고하는 상태에서 실제 quota 조회와 계정 화면 대조.
 - [ ] 제공자별 실제 계정 화면과 수치 의미 대조, 만료와 계정 전환 검증.
 - [ ] 관찰한 계정 외 플랜과 조직 지원 범위 확대.
 
@@ -37,9 +39,9 @@
 - [ ] 복수 화면, 배율, 키보드 접근과 VoiceOver 검증.
 - [ ] 밝은 모드와 어두운 모드 검증.
 
-## 후속 성능 검증
+## MVP 성능 검증
 
-이 절은 장기적인 제품 목표다. 비교 수치가 없는 0.1.0 미리보기에는 RAM 절감 주장을 하지 않는다.
+이 절의 미완료 항목은 [성능 계획의 MVP 통과 기준](performance.md#mvp-release-전)과 함께 남아 있다. 미리보기 패키지가 있어도 MVP 완료를 뜻하지 않는다. 비교 수치가 없는 0.1.0 미리보기에는 RAM 절감 주장을 하지 않는다.
 
 - [x] 동일 조건 비교 절차와 빈 결과 양식 작성.
 - [ ] helper 방식과 단일 프로세스 후보의 같은 기능 비교.
@@ -54,7 +56,10 @@
 - [x] macOS 26과 Apple Silicon을 대상으로 한 앱 번들 설정과 ZIP 생성 스크립트 작성.
 - [x] 기본 ad hoc 서명, 지정 identity 서명과 checksum 생성 절차 구현.
 - [x] 설치, 개인정보, 현재 제공자 제한과 배포 확인 문서 작성.
-- [ ] release 앱 번들 생성과 실제 설치 실행 확인.
+- [x] release 앱 번들 생성, ad hoc deep strict 서명과 ZIP checksum 검증.
+- [x] 이전 head `801a1048`의 macOS CI 성공과 다운로드한 artifact의 checksum, 서명과 arm64 구성 확인.
+- [ ] Antigravity 변경을 포함한 head의 원격 CI 통과.
+- [ ] 설치 후 잠금 해제한 Mac의 실제 화면에서 실행 확인.
 - [ ] Developer ID 서명과 공증 또는 미리보기 제한 확정.
 - [ ] 소유자의 라이선스 선택.
 - [ ] 검증된 파일과 checksum을 포함한 공개 릴리스.

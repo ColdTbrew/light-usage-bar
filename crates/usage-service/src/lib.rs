@@ -95,9 +95,16 @@ impl Slot {
             provider: PROVIDERS[index],
             enabled: self.policy.enabled,
             snapshot: view.as_ref().and_then(|view| view.snapshot.cloned()),
-            freshness: view
-                .as_ref()
-                .map_or(Freshness::Missing, |view| view.freshness),
+            freshness: if view.as_ref().is_some_and(|view| view.snapshot.is_some())
+                && self
+                    .error
+                    .is_some_and(|error| local_observation_failure(PROVIDERS[index], error))
+            {
+                Freshness::Stale
+            } else {
+                view.as_ref()
+                    .map_or(Freshness::Missing, |view| view.freshness)
+            },
             fetch_state: if self.policy.busy {
                 FetchState::Refreshing
             } else if let Some(error) = self.error {
@@ -301,8 +308,12 @@ fn handle_completion(
             result: Err(failure),
             ..
         } => {
-            slot.cache = None;
-            slot.revision = None;
+            if failure.identity_invalidated
+                || !local_observation_failure(PROVIDERS[index], failure.error)
+            {
+                slot.cache = None;
+                slot.revision = None;
+            }
             finish(slot, Some(failure), jitter);
         }
         Completion::Fetched { token, result, .. } => match result {
@@ -330,6 +341,19 @@ fn handle_completion(
             }
         },
     }
+}
+
+fn local_observation_failure(provider: Provider, error: FetchError) -> bool {
+    provider == Provider::Antigravity
+        && matches!(
+            error,
+            FetchError::TemporarilyUnavailable
+                | FetchError::InvalidResponse
+                | FetchError::NeedsVerification
+                | FetchError::NeedsAuthentication
+                | FetchError::PermissionDenied
+                | FetchError::RateLimited
+        )
 }
 
 fn finish(slot: &mut Slot, failure: Option<ProbeFailure>, jitter: &mut u64) {
@@ -383,6 +407,120 @@ async fn sleep_until(deadline: Option<Instant>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn local_observation_failure_retains_stale_usage_but_confirmed_changes_clear_it() {
+        let now = Instant::now();
+        let wall = SystemTime::now();
+        for (provider, error, invalidated, retained) in [
+            (
+                Provider::Antigravity,
+                FetchError::TemporarilyUnavailable,
+                false,
+                true,
+            ),
+            (
+                Provider::Antigravity,
+                FetchError::InvalidResponse,
+                false,
+                true,
+            ),
+            (
+                Provider::Antigravity,
+                FetchError::NeedsVerification,
+                false,
+                true,
+            ),
+            (
+                Provider::Antigravity,
+                FetchError::NeedsAuthentication,
+                false,
+                true,
+            ),
+            (
+                Provider::Antigravity,
+                FetchError::PermissionDenied,
+                false,
+                true,
+            ),
+            (Provider::Antigravity, FetchError::RateLimited, false, true),
+            (
+                Provider::Antigravity,
+                FetchError::NeedsVerification,
+                true,
+                false,
+            ),
+            (Provider::Antigravity, FetchError::Unsupported, false, false),
+            (
+                Provider::Codex,
+                FetchError::TemporarilyUnavailable,
+                false,
+                false,
+            ),
+            (
+                Provider::Claude,
+                FetchError::NeedsAuthentication,
+                false,
+                false,
+            ),
+        ] {
+            let identity = usage_core::Identity {
+                provider,
+                account: usage_core::AccountId::new("synthetic@example.invalid").unwrap(),
+                workspace: None,
+            };
+            let snapshot = usage_providers::parse_antigravity(
+                br#"{"groups":[{"buckets":[{"bucketId":"synthetic","remainingFraction":0.5}]}]}"#,
+                &identity,
+                wall,
+            )
+            .unwrap();
+            let mut cache = Cache::new(identity);
+            let Begin::Started(token) = cache.begin() else {
+                panic!()
+            };
+            cache.succeed(&token, snapshot.clone()).unwrap();
+            let mut slots: Vec<_> = (0..4)
+                .map(|_| Slot {
+                    policy: Policy::new(true, now),
+                    cache: None,
+                    revision: None,
+                    generation: 1,
+                    task: None,
+                    token: None,
+                    error: None,
+                    expiry_announced: false,
+                })
+                .collect();
+            let index = PROVIDERS.iter().position(|p| *p == provider).unwrap();
+            slots[index].cache = Some(cache);
+            slots[index].policy.start(now);
+            let mut failure: ProbeFailure = error.into();
+            failure.identity_invalidated = invalidated;
+            handle_completion(
+                Completion::Prepared {
+                    index,
+                    generation: 1,
+                    result: Err(failure),
+                },
+                &mut slots,
+                &mut JoinSet::new(),
+                &Arc::new(ProviderClient::new().unwrap()),
+                &mut 0,
+            );
+            let status = slots[index].status(index, wall, now);
+            assert_eq!(status.snapshot, retained.then_some(snapshot));
+            assert_eq!(
+                status.freshness,
+                if retained {
+                    Freshness::Stale
+                } else {
+                    Freshness::Missing
+                }
+            );
+            assert_eq!(status.fetch_state, FetchState::Failed(error));
+        }
+    }
 
     #[tokio::test]
     async fn disable_and_reenable_hold_capacity_until_cleanup_is_joined() {

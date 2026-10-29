@@ -1,6 +1,6 @@
 # 제공자와 오류 참조
 
-2026-10-29 기준이다. 파서 구현, 실제 계정 조회, 계정 화면과의 대조를 구분한다. 아래 결과는 관찰한 계정과 환경에 한정한다.
+2026-10-29 기준이며 Antigravity 로컬 연결 검사는 2026-10-30에 추가했다. 파서 구현, 실제 계정 조회, 계정 화면과의 대조를 구분한다. 아래 결과는 관찰한 계정과 환경에 한정한다.
 
 ## 지원 상태
 
@@ -9,9 +9,9 @@
 | Codex | `chatgpt.com/backend-api/wham/usage` | 읽기 전용 조회 성공. 7일 구간 하나 수신 | 다른 플랜과 조직, 만료 인증, 공식 계정 화면 대조 미완료 |
 | Grok Bot | `computer-hub.grok.com/v1/tools?role=bot_client`의 `bot.usage` | OIDC 인증, 서버 사용자 일치, capability와 조회 성공 | 관찰 응답에 `usagePercent` 없음. 사용률은 `Unknown`. 기간과 초기화 시점은 보존. 팀 계정 미지원 |
 | Claude | `api.anthropic.com/api/oauth/usage` | 비대화형 SSH에서 Keychain `PermissionDenied` | 실제 사용량 조회와 계정 화면 대조 미완료 |
-| Antigravity | summary 응답 파서만 있음 | 실제 조회 없음 | PID, port, CSRF를 검증하는 로컬 서비스 연결 미구현. 항상 `NeedsVerification` |
+| Antigravity | 실행 중인 앱의 loopback HTTPS `GetUserStatus`와 `RetrieveUserQuotaSummary` | 자체 listener의 macOS ABI 검사 통과. 설치 앱 2.24.0의 status 응답에 email이 없어 `NeedsVerification` | 확인된 standalone 설치 경로만 지원. identity를 보고하는 앱 상태에서 quota 조회와 계정 화면 대조 필요 |
 
-Grok Bot은 xAI API 크레딧이나 일반 Grok 채팅 사용량을 뜻하지 않는다. Antigravity 앱은 관찰 환경에서 실행되지 않았다. 앱을 실행하면 현재 코드가 연결되는 것은 아니다.
+Grok Bot은 xAI API 크레딧이나 일반 Grok 채팅 사용량을 뜻하지 않는다. Antigravity를 종료하면 새 사용량을 조회할 수 없다. 공식 앱을 열고 갱신한다. 로컬 관찰이 실패하면 이전 snapshot과 조회 시각을 보존하고 `Stale`로 표시한다. 계정이나 source 변경이 확인되면 이전 값을 지운다.
 
 이 경로는 제공자 내부 클라이언트와 기존 구현을 조사해 사용한다. 공식 외부 API의 장기 호환성 보장이 아니다. 조사한 revision은 [참고 자료](references.md)에 있다.
 
@@ -24,7 +24,7 @@ Grok Bot은 xAI API 크레딧이나 일반 Grok 채팅 사용량을 뜻하지 �
 | Codex | `~/.codex/auth.json` | `CODEX_HOME`을 지정하면 해당 디렉터리의 `auth.json`. ChatGPT OAuth만 허용. API key 결제 방식은 사용하지 않음 |
 | Claude | `~/.claude/.credentials.json` | `CLAUDE_SECURESTORAGE_CONFIG_DIR`가 있으면 우선. 없으면 `CLAUDE_CONFIG_DIR`. 빈 값은 기본 디렉터리 의미 |
 | Grok Bot | `~/.grok/auth.json` | `GROK_HOME`으로 디렉터리 변경. 공식 OIDC map에 후보가 여러 개면 `LIGHT_USAGE_BAR_GROK_SCOPE`로 선택 |
-| Antigravity | 없음 | 인증 정보나 로컬 서비스 탐색을 아직 수행하지 않음 |
+| Antigravity | 실행 중인 앱의 language server | 같은 사용자, PID 시작 시각, 실행 경로, Google 서명과 소유한 TCP LISTEN socket을 확인. argv의 CSRF만 메모리에 보관 |
 
 Claude 기본 프로필에서 파일이 없을 때만 macOS `Claude Code-credentials` Keychain 항목을 읽는다. 사용자 인증 UI가 필요한 항목은 건너뛰도록 요청한다. 항목이 여러 개면 임의로 선택하지 않는다. 명시한 사용자 프로필에서 파일이 없으면 전역 Keychain으로 넘어가지 않는다. Keychain helper의 제한 시간은 2초다.
 
@@ -37,6 +37,20 @@ Finder로 실행하는 앱이 터미널의 환경 변수를 그대로 받는다�
 HTTP는 HTTPS만 허용하며 redirect를 따르지 않는다. 연결 제한은 5초, 네트워크 조회 제한은 15초, 응답 크기는 1 MiB다. 조회 후 인증 정보 재검사에는 별도 3초 제한이 있다. Grok WebSocket도 15초 제한과 1 MiB frame 및 message 제한, 수신 메시지 32개 제한을 사용한다.
 
 Grok 조회는 handshake와 `bot.usage` 한 번으로 끝난다. 프롬프트, 컴퓨터 생성, 구독 변경 요청을 보내지 않는다. 공통 갱신 간격과 `Retry-After` 처리는 [아키텍처](architecture.md)에 있다.
+
+## Antigravity 로컬 연결
+
+지원 경로는 `/Applications/Antigravity.app/Contents/Resources/bin/language_server`다. `language_server` identifier와 Google TeamIdentifier `EQHXZ8M8AV`를 strict codesign 검사한다. 자동 실행, CLI 실행, OAuth, 인증 DB 읽기, 원격 fallback은 없다.
+
+요청은 literal `127.0.0.1` HTTPS로 한정한다. 이 전용 client만 자체 서명 인증서를 허용하고 proxy와 redirect를 끈다. 원격 제공자의 TLS 검증은 유지한다. 프로세스의 IPv4 loopback 또는 wildcard LISTEN socket만 허용한다. IPv6 전용 listener는 현재 지원하지 않는다.
+
+준비와 조회에는 각각 전체 15초 제한이 있다. 응답은 1 MiB, PID 목록은 32768개 미만, fd 목록은 4096개 미만, 후보 endpoint는 16개 이하로 제한한다. 후보 identity 하나라도 확인되지 않으면 첫 계정을 임의로 선택하지 않는다. 확인된 email이 서로 다르면 `NeedsVerification`이다.
+
+조회는 준비한 endpoint에서 status, quota, status 순서로 실행한다. 각 요청 직전과 마지막 응답 뒤에 동일 process, token, socket을 재검사한다. email이나 source가 바뀌면 결과를 폐기한다. CSRF, argv, email 원문과 quota 응답은 로그에 남기지 않는다. `KERN_PROCARGS2`의 원시 버퍼에는 환경 바이트가 포함될 수 있지만 argc 뒤의 환경 항목은 해석하지 않는다.
+
+설치 앱의 관찰된 `userStatus`에는 `cascadeModelConfigData`만 있었고 email이 없었다. 원인을 추정해 계정을 지정하거나 다른 저장소에서 계정을 읽지 않는다.
+
+quota 응답에는 계정 ID가 없다. 앞뒤 status 검사는 중간에 A에서 B로 바뀌었다가 A로 돌아오는 전환을 입증하지 못한다. OS 재검사와 연결 사이의 짧은 경쟁 구간도 남는다. 자체 서명 서비스의 email은 서비스가 보고한 값이며 Google이 서명한 계정 증명이 아니다.
 
 ## 표시와 오류
 
@@ -64,6 +78,7 @@ Grok 조회는 handshake와 `bot.usage` 한 번으로 끝난다. 프롬프트, �
 cargo run --locked -p usage-providers --example probe -- codex
 cargo run --locked -p usage-providers --example probe -- grok
 cargo run --locked -p usage-providers --example probe -- claude
+cargo run --locked -p usage-providers --example probe -- antigravity
 ```
 
 기본 출력은 계정 ID와 원문 응답 없이 상태와 구간 구조만 보여 준다. `--values`를 추가하면 사용량 숫자도 출력하므로 공개 로그에 사용하지 않는다. 지원 요청에는 [개인정보 설명](privacy.md)의 제외 항목을 확인한다.

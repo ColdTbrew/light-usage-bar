@@ -21,7 +21,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo run --locked -p usage-core --example cache_lifecycle
 ```
 
-합성 테스트는 계정 전환, 마지막 성공 값 보존, 오래된 응답 거부, 파싱, IPC와 갱신 제한을 검사한다. 실제 서비스 수락, Keychain 접근 허용, GPUI 화면 표시와 메모리 성능은 이 검사로 확인할 수 없다. Linux에서는 AppKit과 GPUI의 macOS 구현이 컴파일 대상에서 제외된다.
+합성 테스트는 계정 전환, 마지막 성공 값 보존, 오래된 응답 거부, 파싱, IPC와 갱신 제한을 검사한다. Antigravity는 source 변경, status 계정 확인, 누락 identity 거절과 일시적인 관찰 실패의 stale 값 보존도 검사한다. 실제 서비스 수락, Keychain 접근 허용, GPUI 화면 표시와 메모리 성능은 이 검사로 확인할 수 없다. Linux에서는 AppKit, GPUI와 Antigravity native 탐색의 macOS 구현이 컴파일 대상에서 제외된다.
 
 macOS에서는 실행 파일을 별도로 빌드한다.
 
@@ -29,7 +29,9 @@ macOS에서는 실행 파일을 별도로 빌드한다.
 cargo build --locked --workspace --bins
 ```
 
-2026-10-29에 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 전체 실행 파일 컴파일을 확인했다. `DEVELOPER_DIR`로 전체 Xcode를 선택하고 Metal toolchain을 설치했다. CI 통과 여부는 해당 커밋의 실제 check 결과로 판단한다. 로컬 검사 기록을 원격 CI 통과로 표현하지 않는다.
+2026-10-30 기준 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 전체 실행 파일 빌드와 Antigravity 변경을 포함한 워크스페이스 테스트 75개를 통과했다. macOS 전용 테스트 초기화 수정 뒤 제공자 테스트와 전체 대상의 엄격한 Clippy를 다시 통과했다. fmt, release 패키징, 최종 번들의 deep strict 서명 검사와 ZIP checksum 검사도 통과했다. `DEVELOPER_DIR`로 전체 Xcode를 선택하고 Metal toolchain을 설치했다.
+
+이전 head `801a1048`의 macOS CI와 다운로드 artifact 검증은 통과했다. 이후 Antigravity 변경의 원격 CI는 아직 실행하지 않았다. CI 통과 여부는 해당 커밋의 실제 check 결과로 판단한다. 로컬 검사 기록을 원격 CI 통과로 표현하지 않는다.
 
 ## 인증 없는 UI 확인
 
@@ -47,7 +49,9 @@ cargo build --locked -p usage-app -p usage-panel
 
 ## 실계정 조회
 
-기존 공식 도구의 로그인 상태에서 [읽기 전용 진단](providers.md#읽기-전용-진단)을 사용한다. 기본 출력을 유지하고 인증 파일과 응답 원문을 수집하지 않는다. Claude 접근 거부나 Antigravity 미구현을 성공으로 바꾸어 기록하지 않는다.
+기존 공식 도구의 로그인 상태에서 [읽기 전용 진단](providers.md#읽기-전용-진단)을 사용한다. Antigravity는 지원 경로의 앱을 실행한 상태에서 확인한다. 기본 출력을 유지하고 인증 파일과 응답 원문을 수집하지 않는다. Claude 접근 거부나 Antigravity identity 확인 실패를 조회 성공으로 기록하지 않는다.
+
+설치된 Antigravity 2.24.0은 status에 email이 없어 `NeedsVerification`이다. 앱 종료 시에는 `TemporarilyUnavailable`을 확인했다. 다른 저장소에서 계정을 추정하거나 합성 identity를 넣어 실제 quota 검증으로 기록하지 않는다. 실제 quota 조회 성공과 공식 화면 대조는 남아 있다.
 
 ## 결과 기록
 

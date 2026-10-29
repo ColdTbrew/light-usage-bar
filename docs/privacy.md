@@ -1,10 +1,12 @@
 # 개인정보와 인증 정보
 
-2026-10-29 기준 코드의 데이터 흐름을 설명한다. 외부 보안 감사나 제공자 인증을 받았다는 뜻은 아니다.
+2026-10-30 기준 코드의 데이터 흐름을 설명한다. 외부 보안 감사나 제공자 인증을 받았다는 뜻은 아니다.
 
 ## 읽는 정보
 
-호스트는 Codex, Claude, Grok 공식 도구가 저장한 인증 정보를 읽고 해당 제공자의 사용량 서버에 인증 요청을 보낸다. 인증 정보의 저장 위치와 선택 규칙은 [제공자 참조](providers.md)에 있다. Antigravity는 조회 경로가 없어 인증 정보나 로컬 서비스를 읽지 않는다.
+호스트는 Codex, Claude, Grok 공식 도구가 저장한 인증 정보를 읽고 해당 제공자의 사용량 서버에 인증 요청을 보낸다. 인증 정보의 저장 위치와 선택 규칙은 [제공자 참조](providers.md)에 있다.
+
+Antigravity는 실행 중인 language server의 같은 사용자, 실행 경로, 시작 시각, Google 코드 서명과 LISTEN socket을 확인한다. 프로세스 인자의 CSRF와 로컬 status의 email을 메모리에 보관한다. 인증 DB나 다른 저장소에서 계정을 추정하지 않는다. 원시 프로세스 인자 버퍼에 환경 바이트가 포함될 수 있지만 환경 항목은 해석하지 않는다.
 
 앱은 프롬프트와 대화를 수집하지 않는다. 공식 도구의 인증 파일을 수정하거나 토큰을 갱신하지 않는다. 로그인 창이나 OAuth 흐름도 제공하지 않는다. 인증이 만료되면 해당 공식 도구에서 로그인한다.
 
@@ -15,8 +17,12 @@
 | `https://chatgpt.com/backend-api/wham/usage` | Codex 구독 사용량 조회 |
 | `https://api.anthropic.com/api/oauth/usage` | Claude 구독 사용량 조회 |
 | `wss://computer-hub.grok.com/v1/tools?role=bot_client` | Grok Bot handshake와 `bot.usage` 조회 |
+| `https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/GetUserStatus` | Antigravity 로컬 계정 확인 |
+| `https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary` | Antigravity 로컬 quota 조회 |
 
 제공자 조회에는 인증 토큰과 서버 요청에 필요한 계정 선택 정보가 들어간다. 앱 운영자의 서버, 분석 수집기나 원격 오류 보고 서비스는 구현하지 않았다. 앱 업데이트 확인 기능도 없다. 빌드 도구가 의존성을 받는 통신은 실행 중 제공자 조회와 별개다.
+
+Antigravity 전용 client만 자체 서명 인증서를 허용한다. 목적지는 literal `127.0.0.1` HTTPS로 제한하며 proxy와 redirect를 사용하지 않는다. 원격 제공자의 TLS 검증은 유지한다. 요청은 status, quota, status 순서이며 계정이나 로컬 source 변경을 확인하면 결과를 폐기한다. email이 없으면 조회를 거절한다. 자체 서명 서비스의 email은 Google이 서명한 계정 증명이 아니다.
 
 ## 로컬 저장과 프로세스
 
@@ -27,6 +33,8 @@
 ```
 
 설정 파일에는 토큰과 계정 ID가 없다. 새 파일은 사용자 전용 권한 `0600`으로 작성한다. 임시 파일에 작성한 뒤 이름을 바꾼다.
+
+Antigravity의 일시적인 관찰 실패는 메모리의 이전 값과 조회 시각을 보존하고 `Stale`로 표시한다. 계정이나 source 변경이 확인되면 이전 값을 지운다. 실제 설치 앱에서 quota 조회에 성공한 기록은 아직 없다.
 
 GPUI 패널에는 사용량, 기간, 초기화 시점, 출처와 조회 상태만 전달한다. 계정 ID, workspace ID, 인증 정보와 원문 응답은 전달하지 않는다. 패널 통신은 앱이 만든 전용 pipe를 사용한다.
 

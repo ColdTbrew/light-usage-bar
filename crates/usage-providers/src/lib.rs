@@ -1,4 +1,5 @@
 //! Read-only subscription adapters. Credentials never cross the snapshot boundary.
+mod antigravity;
 mod credentials;
 mod parsers;
 mod transport;
@@ -37,14 +38,22 @@ impl fmt::Debug for CredentialRevision {
 
 pub struct PreparedProbe {
     identity: Identity,
-    credential: credentials::Credential,
+    source: PreparedSource,
 }
+enum PreparedSource {
+    Remote(credentials::Credential),
+    Antigravity(antigravity::LocalSession),
+}
+
 impl PreparedProbe {
     pub fn identity(&self) -> &Identity {
         &self.identity
     }
     pub fn credential_revision(&self) -> &CredentialRevision {
-        &self.credential.revision
+        match &self.source {
+            PreparedSource::Remote(credential) => &credential.revision,
+            PreparedSource::Antigravity(session) => &session.revision,
+        }
     }
 }
 impl fmt::Debug for PreparedProbe {

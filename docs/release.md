@@ -24,11 +24,11 @@
 
 Claude는 비대화형 SSH에서 Keychain `PermissionDenied`를 반환했다. 사용량 조회 성공은 확인하지 않았다. 사용자 지정 Claude 프로필에 인증 파일이 없을 때 전역 Keychain으로 넘어가지 않도록 구현했다. Keychain helper에는 2초 제한과 취소 시 종료 및 회수 경로가 있다.
 
-Antigravity는 파서만 있다. 조회 전송 경로가 없어 `NeedsVerification`을 반환한다. 관찰 환경에서 Antigravity 앱은 실행되지 않았다.
+Antigravity는 Google 서명과 같은 사용자를 확인한 로컬 language server를 탐색하고 읽기 전용 HTTPS로 조회한다. 설치 앱 2.24.0의 `GetUserStatus`에 email이 없어 `NeedsVerification`을 반환했다. 앱 종료 시 `TemporarilyUnavailable`도 확인했다. 실제 quota 조회 성공은 확인하지 않았다. 계정을 추정하거나 identity 확인을 생략하지 않는다. 연결 경계와 한계는 [제공자 참조](providers.md#antigravity-로컬-연결)에 있다.
 
 ## 아직 통과하지 않은 확인 항목
 
-아래 항목은 미리보기 배포 전에 확인하거나 배포 제한으로 명시해야 한다. 체크하지 않은 항목을 통과로 해석하지 않는다. 전체 로드맵의 성능 비교 완료를 0.1.0 미리보기의 조건으로 삼지는 않는다.
+아래 항목은 미리보기 배포 전에 확인하거나 배포 제한으로 명시해야 한다. 체크하지 않은 항목을 통과로 해석하지 않는다. 전체 성능 비교를 미리보기의 조건으로 삼지는 않지만, 기존 MVP 성능 통과 조건은 그대로 남는다. 미리보기 패키지는 MVP 완료를 뜻하지 않는다.
 
 - [ ] GPUI 패널이 실제 표시되고 준비 응답을 보내는 smoke test.
 - [ ] 네이티브 메뉴와 패널에서 갱신, 활성화 변경, 인증 안내와 종료 조작.
@@ -41,7 +41,9 @@ Antigravity는 파서만 있다. 조회 전송 경로가 없어 `NeedsVerificati
 - [ ] 공개할 릴리스 파일과 checksum 업로드 및 실제 다운로드 확인.
 - [ ] 소유자의 라이선스 선택.
 
-현재 smoke 실행은 잠긴 Mac 화면에서 이루어졌다. 네이티브 창은 관찰했지만 GPUI 준비 응답은 확인하지 못했다. 잠금 상태의 결과만으로 앱 시작 결함이나 정상 표시를 판정할 수 없다. 잠금 해제 후 재실행이 필요하다. 패널 종료 응답 확인, 제공자별 element ID 분리와 NSScreen 기반 화면 배치 수정은 반영했지만 실제 UI 조작 검증은 남아 있다. macOS 전체 동작 테스트 55개와 엄격한 Clippy가 통과했다. 패키징 도구 테스트 4개도 Mac에서 통과했다.
+현재 smoke 실행은 잠긴 Mac 화면에서 이루어졌다. 네이티브 창은 관찰했지만 GPUI 준비 응답은 확인하지 못했다. 잠금 상태의 결과만으로 앱 시작 결함이나 정상 표시를 판정할 수 없다. 잠금 해제 후 재실행이 필요하다. 패널 종료 응답 확인, 제공자별 element ID 분리와 NSScreen 기반 화면 배치 수정은 반영했지만 실제 UI 조작 검증은 남아 있다.
+
+Antigravity 변경을 포함한 macOS 워크스페이스 테스트 75개가 통과했다. macOS 전용 테스트의 초기화 문법을 수정한 뒤 제공자 테스트와 전체 대상의 엄격한 Clippy를 다시 통과했다. fmt, release 패키징, 최종 번들의 deep strict 서명 검사와 ZIP checksum 검사도 통과했다. 패키징 도구 테스트 4개의 이전 Mac 실행도 통과했다. 이 결과는 실제 quota 조회나 GUI 검증을 대신하지 않는다.
 
 ## 미리보기에서 설명할 제한
 
@@ -53,6 +55,8 @@ Antigravity는 파서만 있다. 조회 전송 경로가 없어 `NeedsVerificati
 
 ## 빌드 및 릴리스 자동화
 
-`macOS application` workflow는 macOS 26 ARM64에서 테스트·Clippy·패키징을 수행하고 ZIP과 체크섬을 artifact로 올린다. `Prepare draft release`는 main에서 수동 실행하며, 같은 커밋의 성공한 CI 실행 번호를 받는다. 원본 저장소, 커밋, workflow 경로, push 또는 수동 실행 여부와 체크섬을 확인한 뒤 미리보기 릴리스 초안을 생성한다. GitHub에서 이 흐름이 실제 실행된 결과는 아직 확인 전이다.
+`macOS application` workflow는 macOS 26 ARM64에서 테스트·Clippy·패키징을 수행하고 ZIP과 체크섬을 artifact로 올린다. [PR #2](https://github.com/ColdTbrew/light-usage-bar/pull/2)의 이전 head `801a1048`에서 [CI 실행 40899319487](https://github.com/ColdTbrew/light-usage-bar/actions/runs/40899319487)이 성공했다. 다운로드한 artifact의 checksum, 코드 서명과 arm64 구성을 확인했다. 이후 Antigravity 변경은 아직 원격 CI를 실행하지 않았다.
 
-앱 Resources에는 도달 가능한 의존성 489개의 고지와 출처를 포함했다. 배포 crate에 누락된 40개 패키지는 정확한 upstream 선언이나 배포 manifest 및 참조 원문으로 보충했다. 보충 파일 85개는 SHA-256으로 검증한다. 반복 패키징 때 오래된 리소스가 남지 않고 최종 복사본의 서명이 유효한 것도 Mac에서 확인했다. 이는 원문 고지 수집 결과이며 별도 라이선스 인증을 의미하지 않는다.
+`Prepare draft release`는 main에서 수동 실행하며, 같은 커밋의 성공한 CI 실행 번호를 받는다. 원본 저장소, 커밋, workflow 경로, push 또는 수동 실행 여부와 체크섬을 확인한 뒤 미리보기 릴리스 초안을 생성한다. 이 릴리스 초안 생성 흐름의 실제 실행은 아직 확인하지 않았다.
+
+앱 Resources에는 도달 가능한 의존성의 고지와 출처를 포함한다. 배포 crate에 빠진 고지는 upstream 선언, 배포 manifest와 참조 원문으로 보충하고 SHA-256으로 검증한다. 반복 패키징 때 오래된 리소스가 남지 않고 최종 복사본의 서명이 유효한 것도 Mac에서 확인했다. 이는 원문 고지 수집 결과이며 별도 라이선스 인증을 의미하지 않는다.

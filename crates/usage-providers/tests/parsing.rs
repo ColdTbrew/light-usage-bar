@@ -121,3 +121,46 @@ fn retry_after_accepts_seconds_and_http_dates() {
     );
     assert_eq!(retry_after("invalid", UNIX_EPOCH), None);
 }
+
+#[test]
+fn antigravity_rejects_failed_envelopes_even_with_measured_groups() {
+    for code in [
+        serde_json::json!(1),
+        serde_json::json!("error"),
+        serde_json::json!(null),
+        serde_json::json!(false),
+    ] {
+        let response = serde_json::json!({"code":code,"groups":[{"buckets":[{"bucketId":"synthetic","remainingFraction":0.8}]}]});
+        assert_eq!(
+            parse_antigravity(
+                &serde_json::to_vec(&response).unwrap(),
+                &id(Provider::Antigravity),
+                UNIX_EPOCH
+            ),
+            Err(FetchError::InvalidResponse)
+        );
+    }
+    for code in [
+        serde_json::json!(0),
+        serde_json::json!("0"),
+        serde_json::json!("OK"),
+        serde_json::json!("Success"),
+    ] {
+        for wrapper in ["root", "summary", "response"] {
+            let groups = serde_json::json!({"groups":[{"buckets":[{"bucketId":"synthetic","remainingFraction":0.8}]}]});
+            let response = if wrapper == "root" {
+                serde_json::json!({"code":code,"groups":groups["groups"]})
+            } else {
+                serde_json::json!({"code":code,wrapper:groups})
+            };
+            assert!(
+                parse_antigravity(
+                    &serde_json::to_vec(&response).unwrap(),
+                    &id(Provider::Antigravity),
+                    UNIX_EPOCH
+                )
+                .is_ok()
+            );
+        }
+    }
+}

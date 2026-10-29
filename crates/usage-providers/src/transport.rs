@@ -1,4 +1,6 @@
-use crate::{Cancellation, PreparedProbe, ProbeFailure, credentials, parsers};
+use crate::{
+    Cancellation, PreparedProbe, PreparedSource, ProbeFailure, antigravity, credentials, parsers,
+};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use std::time::{Duration, SystemTime};
@@ -31,10 +33,17 @@ impl ProviderClient {
         provider: Provider,
         cancellation: &Cancellation,
     ) -> Result<PreparedProbe, ProbeFailure> {
+        if provider == Provider::Antigravity {
+            let (identity, session) = antigravity::prepare(cancellation).await?;
+            return Ok(PreparedProbe {
+                identity,
+                source: PreparedSource::Antigravity(session),
+            });
+        }
         let (identity, credential) = credentials::load(provider, cancellation).await?;
         Ok(PreparedProbe {
             identity,
-            credential,
+            source: PreparedSource::Remote(credential),
         })
     }
     pub async fn fetch(&self, probe: PreparedProbe) -> Result<Snapshot, ProbeFailure> {
@@ -46,28 +55,38 @@ impl ProviderClient {
         probe: PreparedProbe,
         cancellation: &Cancellation,
     ) -> Result<Snapshot, ProbeFailure> {
+        let credential = match &probe.source {
+            PreparedSource::Antigravity(session) => {
+                return antigravity::fetch(session, &probe.identity, cancellation).await;
+            }
+            PreparedSource::Remote(credential) => credential,
+        };
         let result = tokio::select! {
             biased;
             () = cancellation.cancelled() => return Err(FetchError::TemporarilyUnavailable.into()),
-            result = tokio::time::timeout(DEADLINE, self.fetch_inner(&probe)) =>
+            result = tokio::time::timeout(DEADLINE, self.fetch_inner(&probe, credential)) =>
                 result.unwrap_or_else(|_| Err(FetchError::TemporarilyUnavailable.into())),
         };
         let current = credentials::load(probe.identity.provider, cancellation).await;
         let (identity, credential) = current.map_err(invalidate)?;
-        if identity != probe.identity || credential.revision != probe.credential.revision {
+        if identity != probe.identity || credential.revision != *probe.credential_revision() {
             return Err(invalidate(FetchError::NeedsVerification.into()));
         }
         result
     }
-    async fn fetch_inner(&self, probe: &PreparedProbe) -> Result<Snapshot, ProbeFailure> {
+    async fn fetch_inner(
+        &self,
+        probe: &PreparedProbe,
+        credential: &credentials::Credential,
+    ) -> Result<Snapshot, ProbeFailure> {
         match probe.identity.provider {
             Provider::Codex => {
                 let mut request = self
                     .http
                     .get("https://chatgpt.com/backend-api/wham/usage")
-                    .bearer_auth(&probe.credential.token)
+                    .bearer_auth(&credential.token)
                     .header("Accept", "application/json");
-                if let Some(workspace) = &probe.credential.workspace {
+                if let Some(workspace) = &credential.workspace {
                     request = request.header("ChatGPT-Account-Id", workspace);
                 }
                 let bytes = body(
@@ -90,7 +109,7 @@ impl ProviderClient {
                 let response = self
                     .http
                     .get("https://api.anthropic.com/api/oauth/usage")
-                    .bearer_auth(&probe.credential.token)
+                    .bearer_auth(&credential.token)
                     .header("anthropic-beta", "oauth-2025-04-20")
                     .header("Accept", "application/json")
                     .send()
@@ -103,11 +122,15 @@ impl ProviderClient {
                     SystemTime::now(),
                 )?)
             }
-            Provider::GrokBot => self.grok(probe).await,
+            Provider::GrokBot => self.grok(probe, credential).await,
             Provider::Antigravity => Err(FetchError::NeedsVerification.into()),
         }
     }
-    async fn grok(&self, probe: &PreparedProbe) -> Result<Snapshot, ProbeFailure> {
+    async fn grok(
+        &self,
+        probe: &PreparedProbe,
+        credential: &credentials::Credential,
+    ) -> Result<Snapshot, ProbeFailure> {
         use tokio_tungstenite::tungstenite::{
             client::IntoClientRequest,
             protocol::{Message, WebSocketConfig},
@@ -115,7 +138,7 @@ impl ProviderClient {
         let mut request = "wss://computer-hub.grok.com/v1/tools?role=bot_client"
             .into_client_request()
             .map_err(|_| FetchError::InvalidResponse)?;
-        let mut authorization = format!("Bearer {}", probe.credential.token)
+        let mut authorization = format!("Bearer {}", credential.token)
             .parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()
             .map_err(|_| FetchError::NeedsAuthentication)?;
         authorization.set_sensitive(true);
@@ -204,7 +227,7 @@ impl ProviderClient {
         Err(FetchError::InvalidResponse.into())
     }
 }
-async fn body(response: reqwest::Response) -> Result<Vec<u8>, ProbeFailure> {
+pub(crate) async fn body(response: reqwest::Response) -> Result<Vec<u8>, ProbeFailure> {
     if response.status() != StatusCode::OK {
         return Err(status(
             response.status().as_u16(),
@@ -314,11 +337,11 @@ mod tests {
                 account: AccountId::new("synthetic").unwrap(),
                 workspace: None,
             },
-            credential: credentials::Credential {
+            source: PreparedSource::Remote(credentials::Credential {
                 token: "synthetic".into(),
                 workspace: None,
                 revision: crate::CredentialRevision([0; 32]),
-            },
+            }),
         };
         let failure = ProviderClient::new()
             .unwrap()

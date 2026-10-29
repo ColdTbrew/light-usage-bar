@@ -235,6 +235,7 @@ pub fn parse_antigravity(
     now: SystemTime,
 ) -> Result<Snapshot, FetchError> {
     let v = json(bytes)?;
+    crate::antigravity::boundary::successful_code(&v)?;
     let groups = v
         .get("groups")
         .or_else(|| v.pointer("/response/groups"))

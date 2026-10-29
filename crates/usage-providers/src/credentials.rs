@@ -553,11 +553,11 @@ mod tests {
         .unwrap();
         let probe = PreparedProbe {
             identity,
-            credential,
+            source: crate::PreparedSource::Remote(credential),
         };
         let debug = format!("{probe:?} {:?}", probe.credential_revision());
         assert!(!debug.contains("synthetic-first"));
-        assert!(!debug.contains(&opaque(&probe.credential.revision)));
+        assert!(!debug.contains(&opaque(probe.credential_revision())));
         tokio::fs::write(
             &path,
             br#"{"claudeAiOauth":{"accessToken":"synthetic-second"}}"#,
