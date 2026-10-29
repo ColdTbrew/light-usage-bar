@@ -1,5 +1,13 @@
 # Project working rules
 
+## Required workflow
+
+- Apply `pstack-codex` to every task in this repository, including investigation, code, tests, documentation, review, and release work.
+- Start with `$pstack-codex:poteto-mode`, read its installed `SKILL.md`, and follow the matching playbook and applicable leaf skills. Locate it through the active Codex skill catalog or the `pstack-codex` plugin installation under `${CODEX_HOME:-$HOME/.codex}/plugins/cache`.
+- Keep design and implementation review independent. Verify observable behavior before reporting completion. Record checks that could not run on the current machine.
+- Install or update the workflow using [pstack-codex](https://github.com/ColdTbrew/pstack-codex). Do not copy its entire skill collection into this repository.
+- Use `uv` for any Python work.
+
 ## Scope
 
 - Build a macOS menu bar app with Rust and GPUI for Claude, Codex, Grok Bot subscription usage, and Antigravity.
