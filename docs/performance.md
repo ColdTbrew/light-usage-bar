@@ -1,10 +1,25 @@
 # 성능 목표와 검증 계획
 
-상태: **미구현·미측정**
+상태: **macOS 앱 미구현·앱 성능 미측정**
 
-기준일: 2026-10-25
+갱신일: 2026-10-29
 
 대상: macOS 전용. Apple Silicon에서 먼저 측정하며 Intel 결과는 실제 측정한 경우에만 별도로 게시한다.
+
+## 확인한 측정 환경
+
+2026-10-29에 tailnet SSH로 아래 환경을 확인했다. 앱 성능 측정 결과는 아니다.
+
+| 항목 | 확인한 값 |
+| --- | --- |
+| 모델 | MacBook Pro, `Mac15,6` |
+| 칩 | Apple M3 Pro, ARM64 |
+| RAM | 18 GiB, `hw.memsize = 19327352832` |
+| macOS | `26.6.2`, 빌드 `25G83` |
+| 개발 도구 | Command Line Tools, `/Library/Developer/CommandLineTools` |
+| 기본 측정 도구 | `/usr/bin/vmmap`, `/usr/bin/footprint`, `/usr/bin/powermetrics`, `/usr/bin/sample`, `/usr/bin/time` |
+
+도구의 경로 존재를 확인했다. 앱을 대상으로 한 수집, 권한, sampling 조건은 실제 실험 때 확인한다. 전체 Xcode와 Instruments의 사용 가능 여부도 아직 검증하지 않았다.
 
 ## 1. 제품 목표
 
