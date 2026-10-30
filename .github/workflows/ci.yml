@@ -1,4 +1,4 @@
-name: Rust core
+name: macOS application
 
 on:
   push:
@@ -10,16 +10,18 @@ permissions:
   contents: read
 
 concurrency:
-  group: rust-core-${{ github.ref }}
+  group: macos-app-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  core:
-    name: Core on macOS ARM64
-    runs-on: macos-15
-    timeout-minutes: 15
+  app:
+    name: Application on macOS ARM64
+    runs-on: macos-26
+    timeout-minutes: 45
     env:
       CARGO_TERM_COLOR: always
+      CARGO_BUILD_JOBS: 2
+      MACOSX_DEPLOYMENT_TARGET: "26.0"
     steps:
       - name: Checkout v7
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -27,11 +29,27 @@ jobs:
           persist-credentials: false
       - name: Install pinned toolchain
         run: rustup show active-toolchain
+      - name: Prepare Metal compiler
+        run: |
+          if ! xcrun metal --version; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Test core behavior
+      - name: Test behavior
         run: cargo test --workspace --all-targets --locked
       - name: Check lints
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Run synthetic cache lifecycle
         run: cargo run --locked -p usage-core --example cache_lifecycle
+      - name: Package Apple Silicon application
+        run: bash scripts/package-macos.sh
+      - name: Upload application archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: Light-Usage-Bar-macOS-arm64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14

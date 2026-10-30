@@ -56,6 +56,52 @@ fn seed(cache: &mut Cache) -> Snapshot {
 }
 
 #[test]
+fn observation_identity_is_fresh_clone_preserving_and_redacted() {
+    let first = AccountId::observation();
+    let second = AccountId::observation();
+    assert_eq!(first, first.clone());
+    assert_ne!(first, second);
+    assert_ne!(first, AccountId::new("observation").unwrap());
+    assert_eq!(first.binding(), AccountBinding::Observation);
+    assert_eq!(
+        AccountId::new("key").unwrap().binding(),
+        AccountBinding::Keyed
+    );
+    assert_eq!(format!("{first:?}"), "AccountId([redacted])");
+    assert_eq!(format!("{first:?}"), format!("{second:?}"));
+}
+
+#[test]
+fn new_observation_rejects_old_completions_and_snapshots() {
+    let first = Identity {
+        provider: Provider::Claude,
+        account: AccountId::observation(),
+        workspace: None,
+    };
+    let second = Identity {
+        account: AccountId::observation(),
+        ..first.clone()
+    };
+    let mut cache = Cache::new(first.clone());
+    seed(&mut cache);
+    let old = start(&mut cache);
+    cache.select(second.clone());
+    assert!(cache.view(time(10)).snapshot.is_none());
+    let current = start(&mut cache);
+    assert_eq!(
+        cache.succeed(&old, snapshot(first.clone())),
+        Err(CompletionError::ObsoleteRequest)
+    );
+    assert_eq!(
+        cache.succeed(&current, snapshot(first)),
+        Err(CompletionError::IdentityMismatch)
+    );
+    cache.select(second.clone());
+    cache.succeed(&current, snapshot(second.clone())).unwrap();
+    assert_eq!(cache.view(time(10)).snapshot.unwrap().identity, second);
+}
+
+#[test]
 fn rejects_invalid_numbers_and_preserves_zero_and_overage() {
     for value in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         assert_eq!(NonNegative::new(value), Err(InvalidNumber));

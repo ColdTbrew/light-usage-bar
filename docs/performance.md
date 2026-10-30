@@ -1,6 +1,6 @@
 # 성능 목표와 검증 계획
 
-상태: **macOS 앱 미구현·앱 성능 미측정**
+상태: macOS 앱 구현과 컴파일 확인. 앱 성능 미측정
 
 갱신일: 2026-10-29
 
@@ -16,10 +16,10 @@
 | 칩 | Apple M3 Pro, ARM64 |
 | RAM | 18 GiB, `hw.memsize = 19327352832` |
 | macOS | `26.6.2`, 빌드 `25G83` |
-| 개발 도구 | Command Line Tools, `/Library/Developer/CommandLineTools` |
+| 개발 도구 | Xcode 26.5. `DEVELOPER_DIR`로 전체 Xcode 선택, Metal toolchain 설치 |
 | 기본 측정 도구 | `/usr/bin/vmmap`, `/usr/bin/footprint`, `/usr/bin/powermetrics`, `/usr/bin/sample`, `/usr/bin/time` |
 
-도구의 경로 존재를 확인했다. 앱을 대상으로 한 수집, 권한, sampling 조건은 실제 실험 때 확인한다. 전체 Xcode와 Instruments의 사용 가능 여부도 아직 검증하지 않았다.
+도구의 경로 존재를 확인했다. 앱을 대상으로 한 수집, 권한, sampling 조건은 실제 실험 때 확인한다. 전체 Xcode와 Metal toolchain으로 앱 컴파일은 확인했다. Instruments를 사용한 성능 수집은 아직 수행하지 않았다.
 
 ## 1. 제품 목표
 

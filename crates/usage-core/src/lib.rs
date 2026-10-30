@@ -13,8 +13,36 @@ pub enum Provider {
 }
 
 /// An equality key whose original value is excluded from diagnostics.
-#[derive(Clone, PartialEq, Eq)]
-pub struct AccountId(String);
+#[derive(Clone)]
+pub struct AccountId(AccountKey);
+
+#[derive(Clone)]
+enum AccountKey {
+    Keyed(String),
+    Observation(Arc<()>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AccountBinding {
+    /// A provider-specific equality key, not a universal verification claim.
+    Keyed,
+    /// A single reading whose account has not been identified.
+    Observation,
+}
+
+impl PartialEq for AccountId {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (AccountKey::Keyed(left), AccountKey::Keyed(right)) => left == right,
+            (AccountKey::Observation(left), AccountKey::Observation(right)) => {
+                Arc::ptr_eq(left, right)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for AccountId {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EmptyIdentifier;
@@ -25,7 +53,18 @@ impl AccountId {
         if value.trim().is_empty() {
             Err(EmptyIdentifier)
         } else {
-            Ok(Self(value))
+            Ok(Self(AccountKey::Keyed(value)))
+        }
+    }
+
+    pub fn observation() -> Self {
+        Self(AccountKey::Observation(Arc::new(())))
+    }
+
+    pub fn binding(&self) -> AccountBinding {
+        match &self.0 {
+            AccountKey::Keyed(_) => AccountBinding::Keyed,
+            AccountKey::Observation(_) => AccountBinding::Observation,
         }
     }
 }

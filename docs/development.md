@@ -1,25 +1,16 @@
-# 개발 및 검증
+# 개발과 검증
 
-현재 구현 범위는 `crates/usage-core`의 공통 사용량 모델과 메모리 캐시다. 실제 제공자에 접속하거나 macOS 메뉴 막대를 실행하는 앱은 아직 없다.
+이 저장소에는 공통 모델, 제공자 어댑터, 갱신 서비스, AppKit 호스트와 GPUI 패널이 있다. macOS 전용 코드가 제외되는 Linux 테스트로 앱 실행을 검증할 수 없다.
 
-## 개발 도구 준비
+## 도구와 작업 규칙
 
-Rust 버전은 `rust-toolchain.toml`의 `1.99.1`로 고정한다. Rust 설치는 [공식 rustup 안내](https://rust-lang.org/tools/install/)를 따른다. 이 워크스페이스는 외부 Rust crate에 의존하지 않는다.
+Rust `1.99.1`은 `rust-toolchain.toml`에 고정했다. GPUI는 `0.2.2`다. `Cargo.lock`을 사용한다. `cargo`를 찾지 못하면 셸에서 `export PATH="$HOME/.cargo/bin:$PATH"`를 실행한다.
 
-이번 작업에서 DGX와 Mac의 셸 설정은 수정하지 않았다. 해당 터미널에서 `cargo`를 찾지 못하면 `export PATH="$HOME/.cargo/bin:$PATH"`를 실행한다.
+저장소의 `AGENTS.md`에 따라 [pstack-codex](https://github.com/ColdTbrew/pstack-codex)를 조사, 구현, 검토와 배포에 적용한다. Codex 작업은 `$pstack-codex:poteto-mode`로 시작한다. Python 작업에는 `uv`를 사용한다.
 
-저장소 작업에는 [pstack-codex](https://github.com/ColdTbrew/pstack-codex)를 적용한다. 설치 명령은 다음과 같다.
+DGX Spark GB10, Ubuntu ARM64는 공통 로직 개발과 테스트 환경이다. macOS 빌드와 UI 검증은 Apple Silicon Mac에서 수행한다. 전체 Xcode와 Metal toolchain 준비는 [설치 문서](install.md)에 있다.
 
-```sh
-codex plugin marketplace add ColdTbrew/pstack-codex --ref main
-codex plugin add pstack-codex@pstack-codex
-git clone https://github.com/ColdTbrew/pstack-codex.git
-bash pstack-codex/scripts/install-agents.sh
-```
-
-설치 후 새 Codex 작업에서 `$pstack-codex:poteto-mode`를 사용한다. `AGENTS.md`는 조사, 구현, 문서, 검토와 배포 작업에도 이 규칙을 적용한다. Python 작업이 필요하면 `uv`를 사용한다.
-
-## 공통 라이브러리 확인
+## 정적 검사와 합성 테스트
 
 저장소 루트에서 실행한다.
 
@@ -30,42 +21,42 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo run --locked -p usage-core --example cache_lifecycle
 ```
 
-예제는 합성 사용량으로 성공, 조회 실패, 계정 전환을 실행한다. 실패 뒤에는 마지막 사용량을 유지하고, 계정이 바뀌면 이전 계정 값을 제거한다. 인증 정보와 네트워크는 사용하지 않는다.
+합성 테스트는 계정 전환, 마지막 성공 값 보존, 오래된 응답 거부, 파싱, IPC와 갱신 제한을 검사한다. Antigravity는 source 변경, status 계정 확인, 누락 identity 거절과 일시적인 관찰 실패의 stale 값 보존도 검사한다. 실제 서비스 수락, Claude CLI의 인증된 화면 수집, GPUI 화면 표시와 메모리 성능은 이 검사로 확인할 수 없다. Linux에서는 AppKit, GPUI와 Antigravity native 탐색의 macOS 구현이 컴파일 대상에서 제외된다. Claude의 Unix PTY fixture는 실제 macOS CLI와 별도로 검증해야 한다.
 
-CI는 `macos-15`에서 같은 명령을 실행한다. GitHub가 문서화한 이 runner의 CPU는 ARM64다. [Runner 명세](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)를 참고한다. 공통 라이브러리 검증이며, AppKit·GPUI 앱 실행과 RAM 비교를 대신하지 않는다.
+macOS에서는 실행 파일을 별도로 빌드한다.
 
-## 첫 구현의 설계 선택
+```sh
+cargo build --locked --workspace --bins
+```
 
-사용량 snapshot은 성공한 조회 결과를 보존한다. 캐시는 진행 중인 요청과 실패 상태를 별도로 관리하고, 조회 시각과 만료 시각으로 최신성을 판단한다.
+2026-10-30 기준 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 CLI 수집 변경을 포함한 워크스페이스 테스트 107개를 통과했다. 구성은 고지 4개, 호스트 8개, 공통 모델 18개, 표시 8개, 패널 18개, 제공자 39개, 파싱 6개와 서비스 6개다. 전체 대상의 엄격한 Clippy, release 패키징과 번들 서명 검사도 통과했다. `DEVELOPER_DIR`로 전체 Xcode를 선택하고 Metal toolchain을 설치했다.
 
-| 후보 | 판단 |
-| --- | --- |
-| 사용량과 조회 상태를 한 레코드에서 계속 덮어쓰기 | 실패 처리 중 마지막 정상 값과 측정 시각을 잃기 쉬워 채택하지 않는다. |
-| 성공 snapshot과 조회 상태 분리 | 마지막 정상 값, 새 오류, 오래됨을 함께 표현할 수 있어 채택한다. |
+Antigravity 변경을 포함한 이전 head `5bb0389`, tree `a69fb6e`의 [macOS CI 실행 40905365316](https://github.com/ColdTbrew/light-usage-bar/actions/runs/40905365316)이 성공했다. 다운로드한 artifact `12912472512`의 checksum과 번들의 deep strict 서명을 확인했다. 이 결과는 해당 head에 한정한다. 제공자별 안내 문구와 문서를 바꾼 새 head는 CI와 번들 검사를 다시 통과해야 한다.
 
-`Model the Domain` 원칙에 따라 알 수 없는 값, 사용·잔여 방향, 초기화·체험 만료, 조회 상태를 타입으로 구분한다. `Test Behavior, Not Implementation` 원칙에 따라 반환된 값과 계정 전환 결과를 검증한다.
+## 인증 없는 UI 확인
 
-독립적인 두 구현안을 비교해 작은 직접 호출형 캐시를 선택했다. 다른 후보에서 조회 상태를 하나의 내부 enum으로 표현하는 방식을 채택했다. 제공자 window 식별자·시작 시각과 계산값의 근거 설명은 검토에서 발견한 누락을 보완한 것이다. 요청별 `Arc` 식별자로 이전 응답과 다른 캐시의 응답을 차단한다. 물리적인 요청 취소를 기다리는 큐, 전역 요청 번호와 IPC용 표시 타입은 이번 범위에 넣지 않았다.
+macOS에서 실행 파일 둘을 같은 debug 또는 release 디렉터리에 빌드한 뒤 실행한다.
 
-Snapshot의 출처와 관측 시각은 모든 window에 공통으로 적용된다. 서로 다른 출처나 관측 시각의 값을 합칠 때는 adapter에서 이 제약을 고려해야 한다. 계산값의 설명에는 입력값과 가정을 기록하며, 비밀값과 원문 계정 정보는 넣지 않는다. 라이브러리는 설명이 비어 있는지만 검사하며 계산의 사실 여부를 검증하지 않는다.
+```sh
+cargo build --locked -p usage-app -p usage-panel
+./target/debug/light-usage-bar --demo
+./target/debug/light-usage-bar --smoke-test
+```
 
-## 검증 범위
+`--demo`는 합성 스냅샷을 사용하고 실제 제공자에 접속하지 않는다. `--smoke-test`도 합성 데이터를 사용한다. 이전 head `5bb0389`의 CI 번들은 잠금 해제한 Mac에서 패널 시작, 첫 프레임 뒤 준비 응답, 종료와 회수를 통과했다. 종료 코드는 0이고 남은 패널 프로세스는 0개였다. 실제 화면 캡처와 버튼 조작은 아직 확인하지 않았다. 상세 실행 결과는 [배포 상태](release.md)에 있다.
 
-2026-10-29의 로컬 검증 장비는 DGX Spark GB10, Ubuntu ARM64다. 이 환경의 Rust 테스트 결과는 공통 로직에만 적용된다. Linux 앱 지원을 추가한 것은 아니다.
+앱 번들의 호스트 실행 파일에도 같은 옵션을 전달할 수 있다. 패널 실행 파일을 직접 실행하면 호스트의 초기 메시지가 없으므로 정상 앱 사용과 다르다.
 
-macOS 빌드와 앱 실행에는 tailnet의 MacBook Pro를 사용한다. SSH 접속 계정은 `coldbrew@macbookpro`다. 작업 파일은 기존 체크아웃과 분리한 디렉터리에 복사한다. 현재 확인한 장비는 `Mac15,6`, RAM 18 GiB, macOS `26.6.2`와 빌드 `25G83`, ARM64다. Command Line Tools 경로는 `/Library/Developer/CommandLineTools`다.
+## 실계정 조회
 
-현재 DGX에는 전용 SSH 별칭 `light-usage-bar-mac`을 설정했다. `ssh light-usage-bar-mac`으로 접속하며, 다른 개발 장비에서는 자신의 SSH 설정을 사용한다. 개인키는 저장소에 포함하지 않는다.
+기존 공식 도구의 로그인 상태에서 [읽기 전용 진단](providers.md#읽기-전용-진단)을 사용한다. Antigravity는 지원 경로의 앱을 실행한 상태에서 확인한다. 기본 출력을 유지하고 인증 파일과 응답 원문을 수집하지 않는다. Claude 접근 거부나 Antigravity identity 확인 실패를 조회 성공으로 기록하지 않는다.
 
-2026-10-29에 두 장비에서 Rust `1.99.1`로 다음 확인을 완료했다. Mac에 복사한 라이브러리, 테스트와 예제 파일의 SHA-256이 DGX 원본과 일치했다.
+Claude는 [Claude 로그인과 CLI 수집](providers.md#claude-로그인과-cli-수집)을 따른다. Mini GUI 세션의 production probe에서 준비와 조회가 성공했고 측정값과 기간이 있는 두 구간을 수신했다. 초기화 시점은 없었으며 추정하지 않았다. 조회 뒤 probe와 공식 CLI가 남지 않음을 필터링한 프로세스 목록으로 확인했다. 새 앱의 사용자 제공 캡처에서 Claude의 `Up to date`, `5h`와 `7d` 숫자 및 막대, 알 수 없는 초기화 시점을 확인했다. 공식 화면의 수치 대조, Details와 버튼 수용 검사는 남아 있다.
 
-| 확인 항목 | DGX Ubuntu ARM64 | MacBook Pro ARM64 |
-| --- | --- | --- |
-| `cargo fmt --all -- --check` | 통과 | 통과 |
-| `cargo test --workspace --all-targets --locked` | 동작 테스트 16개 통과 | 동작 테스트 16개 통과 |
-| `cargo clippy --workspace --all-targets --locked -- -D warnings` | 통과 | 통과 |
-| `cargo run --locked -p usage-core --example cache_lifecycle` | 42% 보존 후 계정 전환 시 값 없음 | 42% 보존 후 계정 전환 시 값 없음 |
+Mac 네이티브 수명 주기 테스트 8개는 프로세스 그룹과 관찰한 자손의 부재, runtime 종료 전 취소 정리를 포함한다. Darwin에서 출력 제한 후 PTY를 비우지 않아 `yes` 종료를 기다리던 문제는 자식 회수 전에 PTY master를 닫아 수정했다. 출력 제한 테스트도 통과했다. 수집 예산 45초 뒤 정리를 기다리므로 전체 실행 시간의 상한은 보장하지 않는다. 모든 형태의 이탈한 자손을 검증한 결과도 아니다.
 
-이 기록은 네이티브 Mac에서 공통 라이브러리와 콘솔 예제를 실행한 결과다. GitHub CI 상태는 각 PR의 check 결과에서 별도로 확인한다.
+설치된 Antigravity 2.24.0은 status에 email이 없어 `NeedsVerification`이다. 앱 종료 시에는 `TemporarilyUnavailable`을 확인했다. 다른 저장소에서 계정을 추정하거나 합성 identity를 넣어 실제 quota 검증으로 기록하지 않는다. 실제 quota 조회 성공과 공식 화면 대조는 남아 있다. Mini에는 Antigravity 앱이 없어 해당 환경의 검증은 하지 않았다.
 
-실제 계정 인증, 제공자 응답 의미, macOS 메뉴 막대, GPUI 수명, 앱 번들, 최소 macOS 버전과 메모리 사용은 검증하지 않았다. 이 항목의 완료 조건은 [로드맵](roadmap.md)에 유지한다. 라이선스도 아직 선택하지 않았다.
+## 결과 기록
+
+[배포 상태](release.md)에 실행 환경, 빌드와 UI 확인, 제공자 확인, 패키지 검증을 나누어 기록한다. [벤치마크 기록](benchmarks.md)에는 실제 측정값만 넣는다. 공개 기록에서 계정, 토큰과 개인 사용량을 제거한다. 라이선스는 소유자의 결정 전까지 미정으로 유지한다.
