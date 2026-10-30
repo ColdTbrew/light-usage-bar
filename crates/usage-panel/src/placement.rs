@@ -34,8 +34,8 @@ pub fn place(anchor: Rect, screens: &[Screen]) -> Option<(u32, Rect)> {
         })
         .or_else(|| screens.first())?;
     let visible = screen.visible;
-    let width = 460_f64.min(visible.width);
-    let height = 620_f64.min(visible.height);
+    let width = 420_f64.min(visible.width);
+    let height = 560_f64.min(visible.height);
     Some((
         screen.id,
         Rect {
@@ -79,10 +79,10 @@ mod tests {
         ];
         let (id, bounds) = place(rect(-1250., -200., 100., 24.), &screens).unwrap();
         assert_eq!(id, 2);
-        assert_eq!(bounds, rect(80., 24., 460., 620.));
+        assert_eq!(bounds, rect(80., 24., 420., 560.));
         let (id, bounds) = place(rect(-100., -200., 100., 24.), &screens).unwrap();
         assert_eq!(id, 2);
-        assert_eq!(bounds, rect(820., 24., 460., 620.));
+        assert_eq!(bounds, rect(860., 24., 420., 560.));
     }
 
     #[test]
@@ -95,7 +95,7 @@ mod tests {
         let anchor = rect(700., -600., 100., 24.);
         let (id, bounds) = place(anchor, &[screen]).unwrap();
         assert_eq!(id, 3);
-        assert_eq!(bounds, rect(340., 24., 460., 516.));
+        assert_eq!(bounds, rect(380., 24., 420., 516.));
     }
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
         }];
         assert_eq!(
             place(rect(900., 0., 50., 20.), &screens),
-            Some((7, rect(0., 20., 400., 580.)))
+            Some((7, rect(0., 20., 400., 560.)))
         );
         assert_eq!(place(rect(0., 0., 1., 1.), &[]), None);
     }

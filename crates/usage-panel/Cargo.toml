@@ -7,8 +7,11 @@ edition = "2024"
 name = "light-usage-panel"
 path = "src/main.rs"
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[dependencies]
 usage-display = { path = "../usage-display" }
+chrono = { version = "=0.4.42", default-features = false, features = ["std"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit"] }
 async-channel = "=2.5.0"
 objc2 = "=0.6.5"

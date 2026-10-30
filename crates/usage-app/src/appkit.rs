@@ -3,7 +3,7 @@ use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::*;
-use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol, NSPoint, NSSize, NSString};
 use std::{
     cell::RefCell,
     path::PathBuf,
@@ -37,10 +37,33 @@ define_class!(
         }
     }
     impl Target {
+        #[unsafe(method(statusItemPressed:))]
+        fn status_item_pressed(&self, _: Option<&NSObject>) {
+            let mtm = MainThreadMarker::new().unwrap();
+            let secondary = NSApplication::sharedApplication(mtm).currentEvent().is_some_and(|event| {
+                event.r#type() == NSEventType::RightMouseUp
+                    || (event.r#type() == NSEventType::LeftMouseUp
+                        && event.modifierFlags().contains(NSEventModifierFlags::Control))
+            });
+            if secondary {
+                let (menu, button) = HOST.with_borrow(|host| {
+                    let host = host.as_ref().unwrap();
+                    (host.menu.clone(), host.item.button(mtm).unwrap())
+                });
+                let bounds = button.bounds();
+                menu.popUpMenuPositioningItem_atLocation_inView(
+                    None,
+                    NSPoint::new(bounds.origin.x, bounds.origin.y),
+                    Some(&button),
+                );
+            } else {
+                open_panel();
+            }
+        }
         #[unsafe(method(didWake:))]
         fn did_wake(&self, _: &NSNotification) { HOST.with_borrow(|host| { host.as_ref().unwrap().intents.send_modify(|v| v.wake=v.wake.wrapping_add(1)); }); }
-        #[unsafe(method(togglePanel:))]
-        fn toggle(&self, _: Option<&NSObject>) { HOST.with_borrow(|host| { let host = host.as_ref().unwrap(); let anchor = anchor(&host.item); host.intents.send_modify(|v| { v.anchor = anchor; v.open = !v.open; }); }); }
+        #[unsafe(method(openPanel:))]
+        fn open(&self, _: Option<&NSObject>) { open_panel(); }
         #[unsafe(method(refreshAll:))]
         fn refresh_all(&self, _: Option<&NSObject>) { HOST.with_borrow(|host| { host.as_ref().unwrap().intents.send_modify(|v| v.refresh[4] = v.refresh[4].wrapping_add(1)); }); }
         #[unsafe(method(providerToggle:))]
@@ -53,6 +76,53 @@ define_class!(
         fn quit(&self, _: Option<&NSObject>) { HOST.with_borrow(|host| { host.as_ref().unwrap().intents.send_modify(|v| v.quit = true); }); }
     }
 );
+fn open_panel() {
+    HOST.with_borrow(|host| {
+        let host = host.as_ref().unwrap();
+        let anchor = anchor(&host.item);
+        host.intents.send_modify(|v| {
+            v.anchor = anchor;
+            v.open = true;
+        });
+    });
+}
+fn status_icon(item: &NSStatusItem, fault: Option<&str>) {
+    let button = item.button(MainThreadMarker::new().unwrap()).unwrap();
+    let label = match fault {
+        Some(fault) => format!("Light Usage Bar. {fault}"),
+        None => "Light Usage Bar".into(),
+    };
+    let description = NSString::from_str(&label);
+    let symbol = if fault.is_some() {
+        "exclamationmark.triangle.fill"
+    } else {
+        "chart.bar.fill"
+    };
+    let image = NSImage::imageWithSystemSymbolName_accessibilityDescription(
+        &NSString::from_str(symbol),
+        Some(&description),
+    );
+    if let Some(image) = image {
+        item.setLength(NSSquareStatusItemLength);
+        image.setSize(NSSize::new(17., 17.));
+        image.setTemplate(true);
+        button.setImage(Some(&image));
+        button.setTitle(&NSString::new());
+    } else {
+        item.setLength(NSVariableStatusItemLength);
+        button.setImage(None);
+        button.setTitle(&NSString::from_str(if fault.is_some() {
+            "Usage !"
+        } else {
+            "Usage"
+        }));
+    }
+    button.setAccessibilityLabel(Some(&description));
+    button.setToolTip(Some(&NSString::from_str(&match fault {
+        Some(fault) => format!("Light Usage Bar: {fault}"),
+        None => "Light Usage Bar. Click to open usage. Right-click for actions.".into(),
+    })));
+}
 fn anchor(item: &NSStatusItem) -> ScreenAnchor {
     let mtm = MainThreadMarker::new().unwrap();
     let button = item.button(mtm).unwrap();
@@ -101,22 +171,48 @@ fn render(snapshot: &DisplaySnapshot) {
             } else {
                 "Open usage panel"
             },
-            Some(sel!(togglePanel:)),
+            Some(sel!(openPanel:)),
             &host.target,
             0,
         ));
+        host.menu.addItem(&menu_item(
+            "Refresh all",
+            Some(sel!(refreshAll:)),
+            &host.target,
+            0,
+        ));
+        let mtm = MainThreadMarker::new().unwrap();
+        host.menu.addItem(&NSMenuItem::separatorItem(mtm));
         for provider in &snapshot.providers {
             let index = DisplayProvider::ALL
                 .iter()
                 .position(|p| *p == provider.provider)
                 .unwrap();
-            host.menu
-                .addItem(&NSMenuItem::separatorItem(MainThreadMarker::new().unwrap()));
-            for line in provider_lines(provider) {
-                let item = menu_item(&line, None, &host.target, index);
-                item.setEnabled(false);
-                host.menu.addItem(&item);
-            }
+            let submenu = NSMenu::new(mtm);
+            submenu.setAutoenablesItems(false);
+            let status = if !provider.enabled {
+                "Disabled"
+            } else {
+                match provider.fetch {
+                    DisplayFetch::Idle => match provider.freshness {
+                        DisplayFreshness::Missing => "No usage data",
+                        DisplayFreshness::Fresh => "Up to date",
+                        DisplayFreshness::Stale => "Saved usage is stale",
+                    },
+                    DisplayFetch::Refreshing => "Refreshing…",
+                    DisplayFetch::NeedsAuthentication => "Sign-in needed",
+                    DisplayFetch::PermissionDenied => "Permission needed",
+                    DisplayFetch::RateLimited => "Rate limited",
+                    DisplayFetch::TemporarilyUnavailable => "Temporarily unavailable",
+                    DisplayFetch::Unsupported => "Unsupported",
+                    DisplayFetch::NeedsVerification => "Verification needed",
+                    DisplayFetch::InvalidResponse => "Invalid response",
+                }
+            };
+            let status = menu_item(status, None, &host.target, index);
+            status.setEnabled(false);
+            submenu.addItem(&status);
+            submenu.addItem(&NSMenuItem::separatorItem(mtm));
             let enabled = menu_item(
                 &format!(
                     "{} {}",
@@ -132,28 +228,25 @@ fn render(snapshot: &DisplaySnapshot) {
                 index,
             );
             enabled.setState(if provider.enabled { 1 } else { 0 });
-            host.menu.addItem(&enabled);
-            host.menu.addItem(&menu_item(
+            submenu.addItem(&enabled);
+            submenu.addItem(&menu_item(
                 &format!("Refresh {}", provider.provider.name()),
                 Some(sel!(providerRefresh:)),
                 &host.target,
                 index,
             ));
-            host.menu.addItem(&menu_item(
+            submenu.addItem(&menu_item(
                 &format!("{} sign-in guidance", provider.provider.name()),
                 Some(sel!(providerAuth:)),
                 &host.target,
                 index,
             ));
+            let item = menu_item(provider.provider.name(), None, &host.target, index);
+            item.setSubmenu(Some(&submenu));
+            host.menu.addItem(&item);
         }
         host.menu
             .addItem(&NSMenuItem::separatorItem(MainThreadMarker::new().unwrap()));
-        host.menu.addItem(&menu_item(
-            "Refresh all",
-            Some(sel!(refreshAll:)),
-            &host.target,
-            0,
-        ));
         host.menu.addItem(&menu_item(
             "Quit Light Usage Bar",
             Some(sel!(quitApp:)),
@@ -163,6 +256,12 @@ fn render(snapshot: &DisplaySnapshot) {
     });
 }
 fn guidance(provider: DisplayProvider) {
+    HOST.with_borrow(|host| {
+        host.as_ref()
+            .unwrap()
+            .intents
+            .send_modify(|intent| intent.open = false);
+    });
     let mtm = MainThreadMarker::new().unwrap();
     let alert = NSAlert::new(mtm);
     alert.setMessageText(&NSString::from_str(&format!("{} sign-in", provider.name())));
@@ -215,15 +314,7 @@ fn post(mailbox: &Arc<Mutex<Mailbox>>, update: UiUpdate) {
         }
         if let Some(fault) = fault {
             HOST.with_borrow(|host| {
-                if let Some(button) = host
-                    .as_ref()
-                    .unwrap()
-                    .item
-                    .button(MainThreadMarker::new().unwrap())
-                {
-                    button.setTitle(&NSString::from_str("Usage !"));
-                    button.setToolTip(Some(&NSString::from_str(fault)));
-                }
+                status_icon(&host.as_ref().unwrap().item, Some(fault));
             });
         }
         if stopped {
@@ -271,13 +362,16 @@ pub fn run() {
             None,
         );
     }
-    let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
-    item.button(mtm)
-        .unwrap()
-        .setTitle(&NSString::from_str("Usage"));
+    let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSSquareStatusItemLength);
+    let button = item.button(mtm).unwrap();
+    status_icon(&item, None);
+    unsafe {
+        button.setTarget(Some(&target));
+        button.setAction(Some(sel!(statusItemPressed:)));
+    }
+    button.sendActionOn(NSEventMask::LeftMouseUp | NSEventMask::RightMouseUp);
     let menu = NSMenu::new(mtm);
     menu.setAutoenablesItems(false);
-    item.setMenu(Some(&menu));
     let (intents, _) = watch::channel(Intent::default());
     let snapshot = if demo {
         demo_snapshot()
