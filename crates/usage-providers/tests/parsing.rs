@@ -13,29 +13,6 @@ fn id(provider: Provider) -> Identity {
     }
 }
 #[test]
-fn missing_null_and_invalid_numbers_are_never_zero() {
-    let identity = id(Provider::Claude);
-    assert_eq!(
-        parse_claude(b"{}", &identity, UNIX_EPOCH),
-        Err(FetchError::InvalidResponse)
-    );
-    let s = parse_claude(br#"{"five_hour":{"utilization":null},"seven_day":{"utilization":-3},"seven_day_sonnet":null}"#, &identity, UNIX_EPOCH).unwrap();
-    assert_eq!(s.windows.len(), 2);
-    assert!(
-        s.windows
-            .iter()
-            .all(|w| w.measurement == Measurement::Unknown)
-    );
-    assert!(
-        parse_claude(
-            br#"{"five_hour":{"utilization":NaN}}"#,
-            &identity,
-            UNIX_EPOCH
-        )
-        .is_err()
-    );
-}
-#[test]
 fn codex_primary_can_be_weekly_and_extra_failures_are_isolated() {
     let s = parse_codex(br#"{"user_id":"synthetic-user","account_id":"synthetic-workspace","rate_limit":{"primary_window":{"used_percent":27,"limit_window_seconds":604800,"reset_at":1000},"secondary_window":null},"additional_rate_limits":[{}, {"limit_name":"Synthetic model","metered_feature":"synthetic-model","rate_limit":{"primary_window":{"used_percent":5,"limit_window_seconds":18000}}}]}"#, &id(Provider::Codex), UNIX_EPOCH).unwrap();
     assert_eq!(s.windows.len(), 2);
@@ -60,13 +37,6 @@ fn codex_account_mismatch_is_rejected() {
         ),
         Err(FetchError::NeedsVerification)
     );
-}
-#[test]
-fn claude_model_limits_remain_separate() {
-    let s = parse_claude(br#"{"five_hour":{"utilization":18.5},"limits":[{"kind":"weekly_scoped","group":"weekly","percent":41,"scope":{"model":{"id":"synthetic","display_name":"Synthetic"}}}]}"#, &id(Provider::Claude), UNIX_EPOCH).unwrap();
-    assert_eq!(s.windows.len(), 2);
-    assert_eq!(s.windows[1].period, Some(Duration::from_secs(604800)));
-    assert_eq!(s.windows[1].model.as_deref(), Some("synthetic"));
 }
 fn grok(percent: &str, trial: bool) -> Vec<u8> {
     format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"usagePercent":{percent},"currentPeriodStartMs":1000,"nextResetAtMs":2000,"hasAvailableUsage":true,"hasNonZeroIncludedLimit":true,"includedLimitZero":false,"trial":{trial},"isTeamSeat":true,"onDemandEligible":true,"onDemandEnabled":true,"manageUrl":"https://example.invalid/usage"}}}}"#).into_bytes()

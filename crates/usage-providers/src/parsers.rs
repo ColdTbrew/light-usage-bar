@@ -78,54 +78,6 @@ fn snapshot(
     })
 }
 
-pub fn parse_claude(
-    bytes: &[u8],
-    identity: &Identity,
-    now: SystemTime,
-) -> Result<Snapshot, FetchError> {
-    let v = json(bytes)?;
-    let mut windows = Vec::new();
-    for key in [
-        "five_hour",
-        "seven_day",
-        "seven_day_opus",
-        "seven_day_sonnet",
-        "seven_day_oauth_apps",
-    ] {
-        if !v.get(key).is_some_and(Value::is_object) {
-            continue;
-        }
-        let mut w = window(key);
-        w.measurement = percent(&v[key]["utilization"], Direction::Used);
-        w.period = Some(Duration::from_secs(if key == "five_hour" {
-            18000
-        } else {
-            604800
-        }));
-        w.resets_at = iso(&v[key]["resets_at"]);
-        w.model = key.strip_prefix("seven_day_").map(str::to_owned);
-        windows.push(w);
-    }
-    if let Some(limits) = v["limits"].as_array() {
-        for (index, limit) in limits.iter().enumerate() {
-            if limit["group"] != "weekly" || limit["kind"] != "weekly_scoped" {
-                continue;
-            }
-            let mut w = window(&format!("limits.{index}"));
-            w.model = text(&limit["scope"]["model"]["id"]);
-            if let Some(ref model) = w.model {
-                w.id = WindowId::new(format!("weekly_scoped.{model}")).ok();
-            }
-            w.label = text(&limit["scope"]["model"]["display_name"]);
-            w.measurement = percent(&limit["percent"], Direction::Used);
-            w.resets_at = iso(&limit["resets_at"]);
-            w.period = Some(Duration::from_secs(604800));
-            windows.push(w);
-        }
-    }
-    snapshot(identity, windows, now, false)
-}
-
 pub fn parse_codex(
     bytes: &[u8],
     identity: &Identity,

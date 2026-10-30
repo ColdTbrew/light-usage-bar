@@ -1,11 +1,11 @@
 //! Read-only subscription adapters. Credentials never cross the snapshot boundary.
 mod antigravity;
+mod claude_cli;
 mod credentials;
 mod parsers;
 mod transport;
 
-pub use credentials::credential_helper_main;
-pub use parsers::{parse_antigravity, parse_claude, parse_codex, parse_grok};
+pub use parsers::{parse_antigravity, parse_codex, parse_grok};
 pub use transport::{ProviderClient, retry_after};
 
 use std::{fmt, time::Duration};
@@ -27,7 +27,7 @@ impl From<FetchError> for ProbeFailure {
     }
 }
 
-/// An equality key for invalidating work after a credential change.
+/// A source equality key. CLI observations do not establish credential continuity.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CredentialRevision([u8; 32]);
 impl fmt::Debug for CredentialRevision {
@@ -43,6 +43,7 @@ pub struct PreparedProbe {
 enum PreparedSource {
     Remote(credentials::Credential),
     Antigravity(antigravity::LocalSession),
+    ClaudeCli(claude_cli::ClaudeObservation),
 }
 
 impl PreparedProbe {
@@ -53,6 +54,7 @@ impl PreparedProbe {
         match &self.source {
             PreparedSource::Remote(credential) => &credential.revision,
             PreparedSource::Antigravity(session) => &session.revision,
+            PreparedSource::ClaudeCli(observation) => &observation.revision,
         }
     }
 }

@@ -21,7 +21,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo run --locked -p usage-core --example cache_lifecycle
 ```
 
-합성 테스트는 계정 전환, 마지막 성공 값 보존, 오래된 응답 거부, 파싱, IPC와 갱신 제한을 검사한다. Antigravity는 source 변경, status 계정 확인, 누락 identity 거절과 일시적인 관찰 실패의 stale 값 보존도 검사한다. 실제 서비스 수락, Keychain 접근 허용, GPUI 화면 표시와 메모리 성능은 이 검사로 확인할 수 없다. Linux에서는 AppKit, GPUI와 Antigravity native 탐색의 macOS 구현이 컴파일 대상에서 제외된다.
+합성 테스트는 계정 전환, 마지막 성공 값 보존, 오래된 응답 거부, 파싱, IPC와 갱신 제한을 검사한다. Antigravity는 source 변경, status 계정 확인, 누락 identity 거절과 일시적인 관찰 실패의 stale 값 보존도 검사한다. 실제 서비스 수락, Claude CLI의 인증된 화면 수집, GPUI 화면 표시와 메모리 성능은 이 검사로 확인할 수 없다. Linux에서는 AppKit, GPUI와 Antigravity native 탐색의 macOS 구현이 컴파일 대상에서 제외된다. Claude의 Unix PTY fixture는 실제 macOS CLI와 별도로 검증해야 한다.
 
 macOS에서는 실행 파일을 별도로 빌드한다.
 
@@ -29,7 +29,7 @@ macOS에서는 실행 파일을 별도로 빌드한다.
 cargo build --locked --workspace --bins
 ```
 
-2026-10-30 기준 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 전체 실행 파일 빌드와 Antigravity 변경을 포함한 워크스페이스 테스트 75개를 통과했다. macOS 전용 테스트 초기화 수정 뒤 제공자 테스트와 전체 대상의 엄격한 Clippy를 다시 통과했다. fmt, release 패키징, 최종 번들의 deep strict 서명 검사와 ZIP checksum 검사도 통과했다. `DEVELOPER_DIR`로 전체 Xcode를 선택하고 Metal toolchain을 설치했다.
+2026-10-30 기준 M3 Pro MacBook Pro, RAM 18 GiB, macOS 26.6.2, Xcode 26.5에서 CLI 수집 변경을 포함한 워크스페이스 테스트 107개를 통과했다. 구성은 고지 4개, 호스트 8개, 공통 모델 18개, 표시 8개, 패널 18개, 제공자 39개, 파싱 6개와 서비스 6개다. 전체 대상의 엄격한 Clippy, release 패키징과 번들 서명 검사도 통과했다. `DEVELOPER_DIR`로 전체 Xcode를 선택하고 Metal toolchain을 설치했다.
 
 Antigravity 변경을 포함한 이전 head `5bb0389`, tree `a69fb6e`의 [macOS CI 실행 40905365316](https://github.com/ColdTbrew/light-usage-bar/actions/runs/40905365316)이 성공했다. 다운로드한 artifact `12912472512`의 checksum과 번들의 deep strict 서명을 확인했다. 이 결과는 해당 head에 한정한다. 제공자별 안내 문구와 문서를 바꾼 새 head는 CI와 번들 검사를 다시 통과해야 한다.
 
@@ -45,15 +45,17 @@ cargo build --locked -p usage-app -p usage-panel
 
 `--demo`는 합성 스냅샷을 사용하고 실제 제공자에 접속하지 않는다. `--smoke-test`도 합성 데이터를 사용한다. 이전 head `5bb0389`의 CI 번들은 잠금 해제한 Mac에서 패널 시작, 첫 프레임 뒤 준비 응답, 종료와 회수를 통과했다. 종료 코드는 0이고 남은 패널 프로세스는 0개였다. 실제 화면 캡처와 버튼 조작은 아직 확인하지 않았다. 상세 실행 결과는 [배포 상태](release.md)에 있다.
 
-앱 번들의 호스트 실행 파일에도 같은 옵션을 전달할 수 있다. 패널 실행 파일을 직접 실행하면 호스트의 초기 메시지가 없으므로 정상 앱 사용과 다르다. 내부 `--credential-helper`는 인증 정보를 출력하는 전용 프로토콜이므로 진단 명령으로 실행하지 않는다.
+앱 번들의 호스트 실행 파일에도 같은 옵션을 전달할 수 있다. 패널 실행 파일을 직접 실행하면 호스트의 초기 메시지가 없으므로 정상 앱 사용과 다르다.
 
 ## 실계정 조회
 
 기존 공식 도구의 로그인 상태에서 [읽기 전용 진단](providers.md#읽기-전용-진단)을 사용한다. Antigravity는 지원 경로의 앱을 실행한 상태에서 확인한다. 기본 출력을 유지하고 인증 파일과 응답 원문을 수집하지 않는다. Claude 접근 거부나 Antigravity identity 확인 실패를 조회 성공으로 기록하지 않는다.
 
-잠금 해제한 Mac의 Claude probe도 `PermissionDenied`를 반환했다. 별도 Keychain 진단의 OSStatus `-25308`은 credential 해석 전 실패를 확인했다. 특정 ACL 원인이나 설치 앱의 신뢰 상태를 입증하지는 않는다. 필요할 때 사용자가 직접 수행할 절차는 [Claude Keychain 접근 문제](providers.md#claude-keychain-접근-문제)에 있다. 사용자가 Mac을 조작할 수 없어 GUI 동의와 조작 검증은 연기했다.
+Claude는 [Claude 로그인과 CLI 수집](providers.md#claude-로그인과-cli-수집)을 따른다. Mini GUI 세션의 production probe에서 준비와 조회가 성공했고 측정값과 기간이 있는 두 구간을 수신했다. 초기화 시점은 없었으며 추정하지 않았다. 조회 뒤 probe와 공식 CLI가 남지 않음을 필터링한 프로세스 목록으로 확인했다. 새 앱의 사용자 제공 캡처에서 Claude의 `Up to date`, `5h`와 `7d` 숫자 및 막대, 알 수 없는 초기화 시점을 확인했다. 공식 화면의 수치 대조, Details와 버튼 수용 검사는 남아 있다.
 
-설치된 Antigravity 2.24.0은 status에 email이 없어 `NeedsVerification`이다. 앱 종료 시에는 `TemporarilyUnavailable`을 확인했다. 다른 저장소에서 계정을 추정하거나 합성 identity를 넣어 실제 quota 검증으로 기록하지 않는다. 실제 quota 조회 성공과 공식 화면 대조는 남아 있다.
+Mac 네이티브 수명 주기 테스트 8개는 프로세스 그룹과 관찰한 자손의 부재, runtime 종료 전 취소 정리를 포함한다. Darwin에서 출력 제한 후 PTY를 비우지 않아 `yes` 종료를 기다리던 문제는 자식 회수 전에 PTY master를 닫아 수정했다. 출력 제한 테스트도 통과했다. 수집 예산 45초 뒤 정리를 기다리므로 전체 실행 시간의 상한은 보장하지 않는다. 모든 형태의 이탈한 자손을 검증한 결과도 아니다.
+
+설치된 Antigravity 2.24.0은 status에 email이 없어 `NeedsVerification`이다. 앱 종료 시에는 `TemporarilyUnavailable`을 확인했다. 다른 저장소에서 계정을 추정하거나 합성 identity를 넣어 실제 quota 검증으로 기록하지 않는다. 실제 quota 조회 성공과 공식 화면 대조는 남아 있다. Mini에는 Antigravity 앱이 없어 해당 환경의 검증은 하지 않았다.
 
 ## 결과 기록
 

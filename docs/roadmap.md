@@ -14,17 +14,20 @@
 
 ## 제공자
 
-- [x] Claude, Codex, Grok Bot 응답 파서와 읽기 전용 전송 구현.
-- [x] 사용자 지정 Claude 인증 경로 격리와 제한 시간이 있는 비대화형 Keychain helper 구현.
+- [x] Codex와 Grok Bot 응답 파서와 읽기 전용 전송 구현.
+- [x] Claude CLI-only 수집 구현. 직접 인증 파일, Keychain helper와 HTTP fallback 제거.
+- [x] 관찰마다 계정 미확인 상태를 전달하는 단위 테스트. 새 앱 화면의 문구 확인은 남아 있음.
 - [x] Codex 실계정 조회 성공과 7일 구간 수신 확인.
 - [x] Grok 실계정 연결, 서버 사용자 일치와 `bot.usage` 성공 확인.
 - [x] Grok 응답의 누락 사용률을 `Unknown`으로 보존.
 - [x] Antigravity summary 응답 파서 구현.
 - [x] Antigravity의 같은 사용자, Google 서명, 실행 경로와 socket을 확인하는 로컬 탐색과 읽기 전용 HTTPS 전송 구현.
 - [x] Antigravity 설치 앱 2.24.0의 email 누락을 `NeedsVerification`으로 거절하고 앱 종료를 `TemporarilyUnavailable`로 처리함을 확인.
-- [x] 기존 인증 경로에 맞춘 제공자별 로그인 안내와 조건부 Claude Keychain 수동 승인 문서 작성.
-- [ ] Claude 설치 앱의 접근 허용과 실제 사용량 조회. 잠금 해제 세션의 probe도 Keychain `PermissionDenied`.
-- [ ] Antigravity가 identity를 보고하는 상태에서 실제 quota 조회와 계정 화면 대조.
+- [x] 공식 CLI에서 로그인과 `/usage`를 확인하는 Claude 안내로 변경.
+- [x] Mini GUI 세션의 production probe에서 두 구간의 측정값과 기간 수신, 조회 뒤 probe와 공식 CLI 부재 확인.
+- [x] Mac 네이티브 수명 주기 테스트 8개 통과. 그룹과 관찰한 자손 부재, runtime 종료 전 취소 정리 포함.
+- [ ] Claude 앱의 `5h`와 `7d` 수치를 공식 화면과 대조. 모호한 초기화 시점은 추정하지 않음.
+- [ ] Antigravity가 identity를 보고하는 상태에서 실제 quota 조회와 계정 화면 대조. Mini에는 앱이 없어 검증하지 않음.
 - [ ] 제공자별 실제 계정 화면과 수치 의미 대조, 만료와 계정 전환 검증.
 - [ ] 관찰한 계정 외 플랜과 조직 지원 범위 확대.
 
@@ -36,7 +39,9 @@
 - [x] 합성 데이터 모드와 smoke 실행 모드 구현.
 - [x] Xcode 26.5와 Metal toolchain으로 macOS 실행 파일 컴파일 확인.
 - [x] 이전 head `5bb0389` CI 번들의 잠금 해제 세션 smoke에서 패널 시작, 첫 프레임 뒤 준비 응답, 종료 코드 0과 남은 패널 프로세스 0개 확인.
-- [ ] 실제 화면 캡처로 패널 표시와 제공자별 안내 문구 확인. 사용자의 GUI 동의와 조작 검증은 연기됨.
+- [x] 이전 후보의 Mini 일반 모드 캡처에서 Claude 두 행, Codex 기간과 막대, 네 카드와 고정 하단 버튼 확인.
+- [x] CLI 전환 뒤 새 앱 사용자 캡처에서 Claude 두 구간의 숫자와 막대, 알 수 없는 초기화 시점과 고정 하단 버튼 표시 확인.
+- [ ] Details의 계정 미확인 문구, 스크롤 뒤 Antigravity 카드와 버튼 수용 검사.
 - [ ] 메뉴와 패널의 실제 클릭, 빠른 재개방, 종료와 자식 회수 검증.
 - [ ] 복수 화면, 배율, 키보드 접근과 VoiceOver 검증.
 - [ ] 밝은 모드와 어두운 모드 검증.
@@ -61,7 +66,8 @@
 - [x] 설치, 개인정보, 현재 제공자 제한과 배포 확인 문서 작성.
 - [x] release 앱 번들 생성, ad hoc deep strict 서명과 ZIP checksum 검증.
 - [x] Antigravity 변경을 포함한 이전 head `5bb0389`, tree `a69fb6e`의 [macOS CI 실행 40905365316](https://github.com/ColdTbrew/light-usage-bar/actions/runs/40905365316) 성공. 다운로드한 artifact `12912472512`의 checksum과 deep strict 서명 확인.
-- [ ] 제공자별 안내 문구와 문서를 바꾼 새 head의 CI와 번들 검사.
+- [x] CLI 전환 뒤 Mac 워크스페이스 테스트 107개, 엄격한 Clippy와 패키징 및 서명 검사.
+- [ ] 새 PR의 CI와 최종 문서를 포함한 배포 번들 검사.
 - [ ] 설치 후 잠금 해제한 Mac의 실제 화면에서 실행 확인.
 - [ ] Developer ID 서명과 공증 또는 미리보기 제한 확정.
 - [ ] 소유자의 라이선스 선택.

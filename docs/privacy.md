@@ -4,18 +4,18 @@
 
 ## 읽는 정보
 
-호스트는 Codex, Claude, Grok 공식 도구가 저장한 인증 정보를 읽고 해당 제공자의 사용량 서버에 인증 요청을 보낸다. 인증 정보의 저장 위치와 선택 규칙은 [제공자 참조](providers.md)에 있다.
+호스트는 Codex와 Grok 공식 도구가 저장한 인증 정보를 읽고 해당 제공자의 사용량 서버에 인증 요청을 보낸다. Claude는 공식 CLI의 `/usage` 화면을 수집한다. 앱은 Claude 인증 파일이나 Keychain 항목을 직접 읽거나 OAuth HTTP fallback을 사용하지 않는다. 인증 정보의 저장 위치와 선택 규칙은 [제공자 참조](providers.md)에 있다.
 
 Antigravity는 실행 중인 language server의 같은 사용자, 실행 경로, 시작 시각, Google 코드 서명과 LISTEN socket을 확인한다. 프로세스 인자의 CSRF와 로컬 status의 email을 메모리에 보관한다. 인증 DB나 다른 저장소에서 계정을 추정하지 않는다. 원시 프로세스 인자 버퍼에 환경 바이트가 포함될 수 있지만 환경 항목은 해석하지 않는다.
 
-앱은 프롬프트와 대화를 수집하지 않는다. 공식 도구의 인증 파일을 수정하거나 토큰을 갱신하지 않는다. 로그인 창이나 OAuth 흐름도 제공하지 않는다. 인증이 만료되면 해당 공식 도구에서 로그인한다.
+앱은 프롬프트와 대화를 수집하지 않는다. 앱 자체는 공식 도구의 인증 파일을 수정하거나 토큰을 갱신하지 않는다. Claude CLI는 자체 인증 저장소에 접근하고 자체 상태를 변경할 수 있다. CLI의 모든 쓰기나 시스템 인증 요청이 없다고 보장하지 않는다. 앱은 로그인 창이나 OAuth 흐름을 제공하지 않으며 로그인, 신뢰와 동의를 자동 승인하지 않는다. 인증이 만료되면 해당 공식 도구에서 로그인한다.
 
 ## 네트워크 목적지
 
 | 목적지 | 목적 |
 | --- | --- |
 | `https://chatgpt.com/backend-api/wham/usage` | Codex 구독 사용량 조회 |
-| `https://api.anthropic.com/api/oauth/usage` | Claude 구독 사용량 조회 |
+| 공식 Claude Code CLI가 선택하는 서비스 | CLI의 `/usage` 조회. 앱이 Claude OAuth endpoint를 직접 호출하지 않음 |
 | `wss://computer-hub.grok.com/v1/tools?role=bot_client` | Grok Bot handshake와 `bot.usage` 조회 |
 | `https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/GetUserStatus` | Antigravity 로컬 계정 확인 |
 | `https://127.0.0.1:<port>/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary` | Antigravity 로컬 quota 조회 |
@@ -38,7 +38,9 @@ Antigravity의 일시적인 관찰 실패는 메모리의 이전 값과 조회 �
 
 GPUI 패널에는 사용량, 기간, 초기화 시점, 출처와 조회 상태만 전달한다. 계정 ID, workspace ID, 인증 정보와 원문 응답은 전달하지 않는다. 패널 통신은 앱이 만든 전용 pipe를 사용한다.
 
-Claude Keychain 조회는 사용자 인증 UI가 필요한 항목을 건너뛰도록 요청한다. 별도 내부 helper는 제한 시간, 취소, 출력 크기 제한을 갖는다. 내부 `--credential-helper` 모드를 직접 실행하거나 출력을 진단 파일로 수집하지 않는다. 해당 출력은 인증 정보를 포함한다.
+Claude CLI는 앱이 만든 사용자 전용 빈 임시 작업 디렉터리에서 실행한다. 도구, hooks, MCP와 remote control을 사용하지 않도록 제한한다. CLI 출력은 메모리에서 화면 해석에 사용하며 원문을 로그나 IPC로 내보내지 않는다. 수집에는 45초 예산을 두고 종료 정리 여유를 남긴다. 강제 종료 뒤 직접 자식의 회수를 기다리므로 총 소요 시간이 45초를 넘지 않는다는 보장은 아니다. Mac 네이티브 수명 주기 테스트 8개와 Mini GUI 세션의 production probe 종료 뒤 프로세스 확인을 통과했다. 모든 형태의 이탈한 자손 회수를 보장하지 않는다. 자세한 제한은 [Claude 로그인과 CLI 수집](providers.md#claude-로그인과-cli-수집)에 있다.
+
+Claude의 관찰 식별자는 한 번의 수집을 구분하며 계정 확인을 뜻하지 않는다. 패널에는 식별자 대신 계정 미확인 상태를 전달한다. 이전 관찰과 현재 로그인 계정이 같다고 보장하지 않는다.
 
 ## 진단 자료 공유
 

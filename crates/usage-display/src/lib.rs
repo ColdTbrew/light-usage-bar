@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
 use usage_core as core;
 
-pub const PROTOCOL: u16 = 1;
+pub const PROTOCOL: u16 = 2;
 pub const MAX_FRAME: usize = 256 * 1024;
 const MAX_TEXT: usize = 512;
 
@@ -84,11 +84,17 @@ pub enum DisplayFetch {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayObservation {
+    pub account_binding: DisplayAccountBinding,
     pub windows: Vec<DisplayWindow>,
     pub observed_at_ms: Option<i64>,
     pub fetched_at_ms: i64,
     pub expires_at_ms: i64,
     pub source: DisplaySource,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DisplayAccountBinding {
+    Keyed,
+    Observation,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -167,6 +173,10 @@ pub fn project_provider(
         provider: provider.into(),
         enabled,
         last_success: snapshot.map(|s| DisplayObservation {
+            account_binding: match s.identity.account.binding() {
+                core::AccountBinding::Keyed => DisplayAccountBinding::Keyed,
+                core::AccountBinding::Observation => DisplayAccountBinding::Observation,
+            },
             windows: s
                 .windows
                 .iter()
@@ -415,32 +425,98 @@ pub fn empty_snapshot(demo: bool) -> DisplaySnapshot {
 }
 pub fn demo_snapshot() -> DisplaySnapshot {
     let mut snapshot = empty_snapshot(true);
-    snapshot.providers[0].last_success = Some(DisplayObservation {
-        windows: vec![DisplayWindow {
-            id: Some("demo-window".into()),
-            label: Some("Synthetic five-hour window".into()),
+    let synthetic_time = 1_767_225_600_000;
+    let percent_window =
+        |id: &str, label: &str, value, direction, period_seconds, reset_offset| DisplayWindow {
+            id: Some(id.into()),
+            label: Some(label.into()),
             model: None,
-            measurement: DisplayMeasurement::Percent {
-                value: 42.0,
-                direction: DisplayDirection::Used,
-            },
-            period_seconds: Some(18000),
+            measurement: DisplayMeasurement::Percent { value, direction },
+            period_seconds,
             period_started_at_ms: None,
-            resets_at_ms: None,
+            resets_at_ms: Some(synthetic_time + reset_offset),
             trial_expires_at_ms: None,
-        }],
-        observed_at_ms: None,
-        fetched_at_ms: 0,
-        expires_at_ms: 0,
-        source: DisplaySource {
-            kind: DisplaySourceKind::ProviderClient,
-            provenance: DisplayProvenance::ProviderReported,
-        },
-    });
-    snapshot.providers[0].freshness = DisplayFreshness::Stale;
-    snapshot.providers[0].fetch = DisplayFetch::Idle;
-    snapshot.providers[1].fetch = DisplayFetch::NeedsAuthentication;
-    snapshot.providers[2].fetch = DisplayFetch::Unsupported;
+        };
+    let mut model_window = percent_window(
+        "synthetic-model-a",
+        "Synthetic model A pool",
+        73.0,
+        DisplayDirection::Remaining,
+        None,
+        7_200_000,
+    );
+    model_window.model = Some("synthetic-model-a".into());
+    let mut other_model_window = percent_window(
+        "synthetic-model-b",
+        "Synthetic model B pool",
+        28.0,
+        DisplayDirection::Remaining,
+        None,
+        14_400_000,
+    );
+    other_model_window.model = Some("synthetic-model-b".into());
+    let windows = [
+        vec![
+            percent_window(
+                "five_hour",
+                "Synthetic five-hour window",
+                42.0,
+                DisplayDirection::Used,
+                Some(18_000),
+                10_800_000,
+            ),
+            percent_window(
+                "seven_day",
+                "Synthetic seven-day window",
+                68.5,
+                DisplayDirection::Used,
+                Some(604_800),
+                345_600_000,
+            ),
+        ],
+        vec![
+            percent_window(
+                "synthetic-short",
+                "Synthetic short window",
+                24.0,
+                DisplayDirection::Used,
+                Some(18_000),
+                7_200_000,
+            ),
+            percent_window(
+                "synthetic-long",
+                "Synthetic long window",
+                57.0,
+                DisplayDirection::Used,
+                Some(604_800),
+                432_000_000,
+            ),
+        ],
+        vec![percent_window(
+            "synthetic-usage",
+            "Synthetic usage window",
+            36.5,
+            DisplayDirection::Used,
+            None,
+            86_400_000,
+        )],
+        vec![model_window, other_model_window],
+    ];
+    for (provider, windows) in snapshot.providers.iter_mut().zip(windows) {
+        provider.last_success = Some(DisplayObservation {
+            account_binding: DisplayAccountBinding::Keyed,
+            windows,
+            observed_at_ms: Some(synthetic_time),
+            fetched_at_ms: synthetic_time,
+            expires_at_ms: synthetic_time + 60_000,
+            source: DisplaySource {
+                kind: DisplaySourceKind::ProviderClient,
+                provenance: DisplayProvenance::Derived,
+            },
+        });
+        provider.freshness = DisplayFreshness::Stale;
+        provider.fetch = DisplayFetch::Idle;
+    }
     snapshot
 }
 fn date(value: i64) -> String {
@@ -462,6 +538,9 @@ pub fn provider_lines(provider: &ProviderDisplay) -> Vec<String> {
         provider.fetch
     )];
     if let Some(observation) = &provider.last_success {
+        if observation.account_binding == DisplayAccountBinding::Observation {
+            lines.push("Account not identified for this reading".into());
+        }
         if observation.windows.is_empty() {
             lines.push("No quota windows reported".into());
         }

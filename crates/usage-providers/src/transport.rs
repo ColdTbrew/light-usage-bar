@@ -1,5 +1,6 @@
 use crate::{
-    Cancellation, PreparedProbe, PreparedSource, ProbeFailure, antigravity, credentials, parsers,
+    Cancellation, PreparedProbe, PreparedSource, ProbeFailure, antigravity, claude_cli,
+    credentials, parsers,
 };
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{Client, StatusCode};
@@ -33,6 +34,13 @@ impl ProviderClient {
         provider: Provider,
         cancellation: &Cancellation,
     ) -> Result<PreparedProbe, ProbeFailure> {
+        if provider == Provider::Claude {
+            let observation = claude_cli::collect(cancellation).await?;
+            return Ok(PreparedProbe {
+                identity: observation.snapshot.identity.clone(),
+                source: PreparedSource::ClaudeCli(observation),
+            });
+        }
         if provider == Provider::Antigravity {
             let (identity, session) = antigravity::prepare(cancellation).await?;
             return Ok(PreparedProbe {
@@ -55,11 +63,19 @@ impl ProviderClient {
         probe: PreparedProbe,
         cancellation: &Cancellation,
     ) -> Result<Snapshot, ProbeFailure> {
+        if let PreparedSource::ClaudeCli(observation) = probe.source {
+            return tokio::select! {
+                biased;
+                () = cancellation.cancelled() => Err(FetchError::TemporarilyUnavailable.into()),
+                result = std::future::ready(Ok(observation.snapshot)) => result,
+            };
+        }
         let credential = match &probe.source {
             PreparedSource::Antigravity(session) => {
                 return antigravity::fetch(session, &probe.identity, cancellation).await;
             }
             PreparedSource::Remote(credential) => credential,
+            PreparedSource::ClaudeCli(_) => unreachable!(),
         };
         let result = tokio::select! {
             biased;
@@ -105,25 +121,8 @@ impl ProviderClient {
                     }
                 })
             }
-            Provider::Claude => {
-                let response = self
-                    .http
-                    .get("https://api.anthropic.com/api/oauth/usage")
-                    .bearer_auth(&credential.token)
-                    .header("anthropic-beta", "oauth-2025-04-20")
-                    .header("Accept", "application/json")
-                    .send()
-                    .await
-                    .map_err(|_| FetchError::TemporarilyUnavailable)?;
-                let bytes = body(response).await?;
-                Ok(parsers::parse_claude(
-                    &bytes,
-                    &probe.identity,
-                    SystemTime::now(),
-                )?)
-            }
             Provider::GrokBot => self.grok(probe, credential).await,
-            Provider::Antigravity => Err(FetchError::NeedsVerification.into()),
+            Provider::Claude | Provider::Antigravity => Err(FetchError::NeedsVerification.into()),
         }
     }
     async fn grok(
@@ -286,6 +285,38 @@ pub fn retry_after(value: &str, now: SystemTime) -> Option<Duration> {
 mod tests {
     use super::*;
     use tokio_tungstenite::tungstenite::http::Response;
+    #[tokio::test]
+    async fn claude_fetch_consumes_the_completed_observation_without_source_access() {
+        let identity = Identity {
+            provider: Provider::Claude,
+            account: AccountId::observation(),
+            workspace: None,
+        };
+        let snapshot = Snapshot {
+            identity: identity.clone(),
+            windows: vec![],
+            timing: Timing {
+                observed_at: None,
+                fetched_at: SystemTime::UNIX_EPOCH,
+                expires_at: SystemTime::UNIX_EPOCH,
+            },
+            source: Source {
+                kind: SourceKind::CommandLine,
+                provenance: Provenance::ProviderReported,
+            },
+        };
+        let probe = PreparedProbe {
+            identity,
+            source: PreparedSource::ClaudeCli(claude_cli::ClaudeObservation {
+                snapshot: snapshot.clone(),
+                revision: crate::CredentialRevision([0; 32]),
+            }),
+        };
+        assert_eq!(
+            ProviderClient::new().unwrap().fetch(probe).await.unwrap(),
+            snapshot
+        );
+    }
     #[tokio::test]
     async fn status_and_retry_hints_survive_without_response_text() {
         for (code, expected) in [

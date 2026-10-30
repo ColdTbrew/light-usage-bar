@@ -287,34 +287,38 @@ fn action_id(provider: DisplayProvider, action: &'static str) -> gpui::ElementId
     };
     gpui::ElementId::NamedChild(Box::new(gpui::ElementId::Name(key.into())), action.into())
 }
-fn quota_row(window: &DisplayWindow, p: Palette) -> gpui::Div {
-    use crate::presentation::{Measurement, measurement, reset};
+fn quota_row(quota: &crate::presentation::QuotaRow<'_>, p: Palette) -> gpui::Div {
+    use crate::presentation::{Measurement, QuotaRow, measurement, reset};
     let mut row = div().flex().flex_col().gap(px(3.)).min_w(px(0.));
-    row = row.child(
-        div()
-            .text_size(px(11.))
-            .line_height(px(15.))
-            .text_color(p.secondary)
-            .child(
-                window
-                    .label
-                    .as_deref()
-                    .or(window.id.as_deref())
-                    .unwrap_or("Quota window")
-                    .to_owned(),
-            ),
-    );
+    let heading = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(8.))
+        .child(
+            div()
+                .text_size(px(11.))
+                .line_height(px(15.))
+                .text_color(p.secondary)
+                .child(quota.label().to_owned()),
+        );
+    let QuotaRow::Reported { window, .. } = quota else {
+        return row.child(heading.child(div().text_color(p.secondary).child("Usage unavailable")));
+    };
     match measurement(&window.measurement) {
         Measurement::Unknown => {
-            row = row.child(div().text_color(p.secondary).child("Usage unavailable"));
+            row =
+                row.child(heading.child(div().text_color(p.secondary).child("Usage unavailable")));
         }
         Measurement::Known { text, fraction } => {
             row = row.child(
-                div()
-                    .text_size(px(15.))
-                    .line_height(px(20.))
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(text),
+                heading.child(
+                    div()
+                        .text_size(px(13.))
+                        .line_height(px(18.))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(text),
+                ),
             );
             if let Some(fraction) = fraction {
                 row = row.child(
@@ -344,14 +348,13 @@ impl Panel {
         p: Palette,
         cx: &mut Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
-        use crate::presentation::{details, fetch, freshness, windows};
+        use crate::presentation::{details, fetch, freshness, quota_rows};
         let id = provider.provider;
         let enabled = provider.enabled;
         let expanded = self.expanded == Some(id);
-        let total = provider
-            .last_success
-            .as_ref()
-            .map_or(0, |value| value.windows.len());
+        let rows = quota_rows(provider);
+        let total = rows.len();
+        let visible = if expanded { total } else { total.min(2) };
         let disclosure = if expanded {
             "Hide details".to_owned()
         } else if total > 2 {
@@ -421,7 +424,7 @@ impl Panel {
                     .child("No quota windows reported"),
             );
         } else {
-            for quota in windows(provider, expanded) {
+            for quota in &rows[..visible] {
                 card = card.child(quota_row(quota, p));
             }
         }
@@ -436,7 +439,7 @@ impl Panel {
                 .text_size(px(11.))
                 .line_height(px(16.))
                 .text_color(p.secondary);
-            for line in details(provider) {
+            for line in details(provider, self.snapshot.demo) {
                 metadata = metadata.child(line);
             }
             card =
@@ -516,7 +519,7 @@ impl Render for Panel {
                             .line_height(px(15.))
                             .text_color(p.secondary)
                             .child(if self.snapshot.demo {
-                                "Synthetic data · No account connected"
+                                "Synthetic demo data · No account connected"
                             } else {
                                 "Subscription usage at a glance"
                             }),

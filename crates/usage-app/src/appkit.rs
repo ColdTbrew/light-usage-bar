@@ -270,7 +270,7 @@ fn guidance(provider: DisplayProvider) {
             "Sign in to the Codex CLI with ChatGPT, then refresh here. Light Usage Bar reads the CLI's local sign-in state. API key billing is not supported."
         }
         DisplayProvider::Claude => {
-            "Sign in to Claude Code, then refresh here. If the default profile needs Keychain permission, open Keychain Access and add the installed Light Usage Bar.app to the allowed apps for Claude Code-credentials. Keep existing allowed apps. Custom profiles use their own credentials file. Claude usage access remains unverified."
+            "Open the official Claude Code CLI in the same user profile, sign in, and confirm /usage shows subscription usage. Then refresh here. Light Usage Bar runs the CLI and does not read Claude credentials directly or approve login or trust prompts. The account for each reading is not identified. Subscription collection by this app remains unverified."
         }
         DisplayProvider::GrokBot => {
             "Sign in to the official Grok CLI with your personal account, then refresh here. Light Usage Bar reads the CLI's local sign-in state for Grok Bot usage. API keys and team accounts are not supported."

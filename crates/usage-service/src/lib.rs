@@ -1,6 +1,5 @@
 mod policy;
 mod settings;
-pub use usage_providers::credential_helper_main;
 
 use policy::Policy;
 use std::{
@@ -463,10 +462,20 @@ mod tests {
                 false,
                 false,
             ),
+            (
+                Provider::Claude,
+                FetchError::TemporarilyUnavailable,
+                false,
+                false,
+            ),
         ] {
             let identity = usage_core::Identity {
                 provider,
-                account: usage_core::AccountId::new("synthetic@example.invalid").unwrap(),
+                account: if provider == Provider::Claude {
+                    usage_core::AccountId::observation()
+                } else {
+                    usage_core::AccountId::new("synthetic@example.invalid").unwrap()
+                },
                 workspace: None,
             };
             let snapshot = usage_providers::parse_antigravity(

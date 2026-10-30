@@ -3,9 +3,6 @@ use usage_providers::ProviderClient;
 #[tokio::main]
 async fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    if args.as_slice() == ["--credential-helper"] {
-        usage_providers::credential_helper_main();
-    }
     let provider = match args.first().map(String::as_str) {
         Some("codex") => Provider::Codex,
         Some("claude") => Provider::Claude,
